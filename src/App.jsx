@@ -106,6 +106,7 @@ export default function QAApp() {
 
   // PWA 및 시네마틱 모달 제어 상태
   const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] = useState(false);
+  const [isCreateSuiteModalOpen, setIsCreateSuiteModalOpen] = useState(false); // 요청 4: 스위트 추가 모달 상태
   const [isDeleteProjectConfirmOpen, setIsDeleteProjectConfirmOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
@@ -133,7 +134,7 @@ export default function QAApp() {
   const [data, setData] = useState({ projects: [], suites: [], cases: [], runs: [] });
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Suite Fold/Unfold 상태 (Hook 규칙을 지키기 위해 조건문 밖으로 이동)
+  // Suite Fold/Unfold 상태
   const [openSuites, setOpenSuites] = useState({});
 
   useEffect(() => {
@@ -244,7 +245,6 @@ export default function QAApp() {
     .border-l-blue-600 { border-left-color: rgba(63, 63, 70, 0.9) !important; }
   `;
 
-  // Firebase Firestore 연동을 통한 로그인 처리
   const handleLogin = async (e) => {
     e.preventDefault();
     const inputId = e.target.userId.value;
@@ -276,7 +276,6 @@ export default function QAApp() {
       }
     }
     
-    // 파이어베이스 오류 시 로컬 스토리지 폴백 동작
     const localUsers = JSON.parse(localStorage.getItem('qa_nexus_users') || '[]');
     const foundUser = localUsers.find(u => u.userId === inputId && u.password === inputPw);
     if (foundUser) {
@@ -319,7 +318,6 @@ export default function QAApp() {
        }
     }
     
-    // 로컬 스토리지 폴백 저장
     const localUsers = JSON.parse(localStorage.getItem('qa_nexus_users') || '[]');
     if (localUsers.some(u => u.userId === newUserId)) {
        setToastMessage("이미 존재하는 ID입니다.");
@@ -396,7 +394,6 @@ export default function QAApp() {
       }
   };
 
-  // 요청사항 1: 프로젝트 추가 모달 핸들러
   const handleCreateProject = (e) => {
     e.preventDefault();
     const newProj = {
@@ -411,11 +408,93 @@ export default function QAApp() {
     setToastMessage('새 프로젝트가 생성되었습니다.');
   };
 
+  // 모달 영역 내의 공통 삭제 로직 (Layout 외부에 정의하여 접근성을 확보)
+  const handleDeleteProject = () => {
+    setData(prev => ({
+        ...prev,
+        projects: prev.projects.filter(p => p.id !== activeProjectId),
+        suites: prev.suites.filter(s => s.projectId !== activeProjectId),
+        runs: prev.runs.filter(r => r.projectId !== activeProjectId)
+    }));
+    setToastMessage('프로젝트가 삭제되었습니다.');
+    setIsDeleteProjectConfirmOpen(false);
+    setIsProjectSettingsOpen(false);
+    setCurrentView('dashboard');
+  };
+
+  // 요청사항 4: 모달 영역 내의 공통 스위트 파일 업로드 처리 로직
+  const handleCreateSuiteUpload = (e) => {
+    e.preventDefault();
+    const name = suiteNameInput; 
+    const file = selectedFile; 
+    
+    if (!file) { setToastMessage('파일을 선택해주세요.'); return; }
+
+    const processData = (jsonData) => {
+      if (jsonData.length < 2) { setToastMessage('데이터가 충분하지 않습니다. 헤더와 최소 1개의 데이터 행이 필요합니다.'); return; }
+
+      const rawHeaders = jsonData[0];
+      const headers = rawHeaders.map((h, i) => h ? String(h).trim() : `열 ${i+1}`);
+
+      const newCases = [];
+      const suiteId = generateId();
+      
+      for (let i = 1; i < jsonData.length; i++) {
+        const row = jsonData[i];
+        if (!row || row.length === 0) continue; 
+        
+        let title = '';
+        const titleIdx = headers.findIndex(h => /(제목|title|이름|name|tc|테스트케이스)/i.test(h.replace(/\s+/g, '')));
+        if (titleIdx !== -1 && row[titleIdx]) title = String(row[titleIdx]);
+        else if (row[0]) title = String(row[0]); 
+        else continue; 
+
+        let priority = 'Medium';
+        const priorityIdx = headers.findIndex(h => /(중요도|우선순위|priority|등급|레벨|level)/i.test(h.replace(/\s+/g, '')));
+        if (priorityIdx !== -1 && row[priorityIdx]) priority = String(row[priorityIdx]);
+
+        const fields = {};
+        headers.forEach((h, idx) => { fields[h] = row[idx] !== undefined ? String(row[idx]) : ''; });
+
+        newCases.push({ id: generateId(), suiteId: suiteId, title: title, priority: priority, fields: fields });
+      }
+
+      if(newCases.length === 0){ setToastMessage('유효한 테스트 케이스를 찾지 못했습니다.'); return; }
+
+      const newSuite = { id: suiteId, projectId: activeProjectId, name: name, headers: headers };
+      
+      setData(prev => ({ ...prev, suites: [...prev.suites, newSuite], cases: [...prev.cases, ...newCases] }));
+      setToastMessage(`성공적으로 ${newCases.length}개의 케이스를 생성했습니다!`);
+      
+      // 모달 닫기 및 초기화
+      setIsCreateSuiteModalOpen(false);
+      setSuiteNameInput('');
+      setSelectedFile(null);
+      setSelectedFileName('');
+    };
+
+    const isCSV = file.name.toLowerCase().endsWith('.csv');
+    const reader = new FileReader();
+
+    if (isCSV) {
+      reader.onload = (evt) => { try { processData(parseCSV(evt.target.result)); } catch(err) { setToastMessage('CSV 파싱 오류 발생'); } };
+      reader.readAsText(file);
+    } else {
+      if (!window.XLSX) { setToastMessage('라이브러리 로딩 중... 다시 시도해주세요.'); return; }
+      reader.onload = (evt) => {
+        try {
+          const workbook = window.XLSX.read(new Uint8Array(evt.target.result), { type: 'array' });
+          processData(window.XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 }));
+        } catch (error) { setToastMessage('파일 파싱 오류. 형식을 확인해주세요.'); }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+  };
+
   const Layout = ({ children, title }) => (
     <div className="flex h-screen bg-[#f8fafc] bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-50/40 via-[#f8fafc] to-slate-100 text-slate-800 font-sans overflow-hidden selection:bg-blue-200/50">
       <style>{globalStyles}</style>
       
-      {/* 요청사항 4: 시네마틱 접이식 사이드바 (사이드바 제어 핸들 추가) */}
       <button
         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
         className={`fixed top-1/2 -translate-y-1/2 z-40 w-5 h-16 bg-white/90 backdrop-blur-md border border-slate-200/80 rounded-r-xl shadow-[4px_0_15px_rgba(0,0,0,0.05)] flex items-center justify-center text-slate-400 hover:text-zinc-800 transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] hover:w-6 hover:bg-white cursor-pointer ${isSidebarOpen ? 'left-60' : 'left-0'}`}
@@ -431,7 +510,7 @@ export default function QAApp() {
           </div>
           
           <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto custom-scrollbar">
-            <NavItem icon={<LayoutDashboard size={18}/>} label="대시보드" active={currentView === 'dashboard'} onClick={() => setCurrentView('dashboard')} />
+            <NavItem icon={<LayoutDashboard size={18}/>} label="Dashboard" active={currentView === 'dashboard'} onClick={() => setCurrentView('dashboard')} />
             <div className="pt-6 pb-2 px-2 text-[10px] font-bold text-slate-400 tracking-wider uppercase">Projects</div>
             {data.projects.map(p => (
               <NavItem 
@@ -475,7 +554,6 @@ export default function QAApp() {
         <header className="h-14 flex items-center justify-between px-8 border-b border-slate-200/50 bg-white/40 backdrop-blur-2xl sticky top-0 z-30 shadow-sm">
           <h2 className="text-[15px] font-bold text-slate-800 tracking-tight">{title}</h2>
         </header>
-        {/* 요청사항 3: 넓은 해상도 활용을 위해 max-w-6xl -> max-w-[1600px] 로 확장 */}
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar relative">
           <div className={`transition-all duration-500 ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'} h-full max-w-[1600px] w-full mx-auto`}>
             {children}
@@ -483,9 +561,9 @@ export default function QAApp() {
         </div>
       </main>
 
-      {/* 요청사항 1: 프로젝트 생성 모달 (입력 테두리 깜빡임 해결) */}
+      {/* 프로젝트 생성 모달 */}
       {isCreateProjectModalOpen && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-zinc-900/60 backdrop-blur-md animate-in fade-in duration-300">
              <div className="bg-white/90 backdrop-blur-xl border border-white shadow-2xl rounded-3xl p-8 w-[500px] relative animate-in zoom-in-95 duration-300">
                 <button onClick={() => setIsCreateProjectModalOpen(false)} className="absolute top-5 right-5 text-zinc-400 hover:text-zinc-800 transition-colors p-1 bg-zinc-100 rounded-full hover:bg-zinc-200"><X size={18}/></button>
                 <h2 className="text-[15px] font-black text-slate-800 mb-6 flex items-center gap-2">
@@ -509,9 +587,85 @@ export default function QAApp() {
           </div>
       )}
 
+      {/* 요청사항 4: 스위트 생성 모달 (전체 Dim 적용 및 모달화) */}
+      {isCreateSuiteModalOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-zinc-900/60 backdrop-blur-md animate-in fade-in duration-300">
+             <div className="bg-white/90 backdrop-blur-xl border border-white shadow-2xl rounded-3xl p-8 w-[600px] max-w-[90vw] max-h-[90vh] flex flex-col relative animate-in zoom-in-95 duration-300">
+                <button onClick={() => setIsCreateSuiteModalOpen(false)} className="absolute top-5 right-5 text-zinc-400 hover:text-zinc-800 transition-colors p-1 bg-zinc-100 rounded-full hover:bg-zinc-200"><X size={18}/></button>
+                <h2 className="text-[15px] font-black text-slate-800 mb-6 flex items-center gap-2 shrink-0">
+                  <UploadCloud className="text-zinc-600" size={20}/> 테스트 스위트 추가
+                </h2>
+                
+                {/* 스크롤바 완벽 숨김 및 하단, 좌/우 짤림 방지 여백(px-2 -mx-2 pb-4) 추가 */}
+                <div className="overflow-y-auto px-2 -mx-2 pb-4 flex-1 min-h-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                  <form onSubmit={handleCreateSuiteUpload} className="space-y-6">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">Test Suite Name</label>
+                      <input name="suiteName" defaultValue={suiteNameInput} onBlur={(e) => setSuiteNameInput(e.target.value)} required className="w-full bg-zinc-50/50 border-2 border-zinc-200 rounded-xl px-4 py-3.5 text-sm font-bold text-zinc-900 focus:outline-none focus:border-zinc-800 focus:ring-[4px] focus:ring-zinc-800/10 transition-all duration-500 caret-zinc-800 shadow-inner" placeholder="예: 회원가입 시나리오 모음" />
+                    </div>
+
+                    <div className="bg-zinc-50/50 border border-zinc-200/50 rounded-xl p-4 shadow-sm">
+                      <h4 className="text-[12px] font-bold text-zinc-800 mb-1.5 flex items-center gap-1.5">
+                        <Info size={14} className="text-zinc-600"/> 동적 헤더 가이드
+                      </h4>
+                      <p className="text-[11px] font-medium text-zinc-600 mb-3 leading-relaxed">
+                        엑셀의 첫 번째 행에 작성된 열 이름이 그대로 시스템에 등록됩니다.
+                      </p>
+                      <div className="flex gap-2.5 text-[11px] font-mono font-bold text-slate-600 bg-white/80 backdrop-blur-md p-3 rounded-lg border border-slate-200/60 overflow-x-auto shadow-sm">
+                        <span className="text-slate-800">테스트 케이스 명</span> | <span>테스트 환경</span> | <span>기대 결과</span> | ...
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">File Attachment</label>
+                      <div className={`relative border-2 border-dashed ${selectedFileName ? 'border-emerald-400/80 bg-emerald-50/50' : 'border-slate-300/80 hover:border-zinc-400/80 bg-slate-50/50'} rounded-2xl p-8 text-center transition-all duration-300 group`}>
+                        <input type="file" name="excelFile" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={(e) => {
+                            const file = e.target.files[0];
+                            if (file) { setSelectedFile(file); setSelectedFileName(file.name); }
+                        }} />
+                        {selectedFileName ? (
+                            <>
+                                <CheckCircle size={36} className="mx-auto mb-3 text-emerald-500" />
+                                <p className="text-emerald-700 text-sm font-bold tracking-tight">{selectedFileName}</p>
+                                <p className="text-[11px] font-medium text-emerald-600 mt-1.5">성공적으로 첨부되었습니다. 클릭하여 변경.</p>
+                            </>
+                        ) : (
+                            <>
+                                <FileSpreadsheet size={36} className="mx-auto mb-3 text-slate-300 group-hover:text-zinc-400 transition-colors" />
+                                <p className="text-slate-700 text-sm font-bold tracking-tight">클릭하거나 파일을 드래그하여 업로드</p>
+                                <p className="text-[11px] font-medium text-slate-400 mt-1.5">.xlsx, .xls, .csv 지원</p>
+                            </>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-6 mt-4 border-t border-slate-100/80">
+                      <button type="button" onClick={() => setIsCreateSuiteModalOpen(false)} className="px-5 py-2.5 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-all">취소</button>
+                      <button type="submit" className="px-6 py-2.5 rounded-xl text-xs font-bold bg-zinc-900 hover:bg-zinc-800 text-white shadow-[0_4px_14px_0_rgba(24,24,27,0.39)] transition-all">업로드 및 생성</button>
+                    </div>
+                  </form>
+                </div>
+             </div>
+          </div>
+      )}
+
+      {/* 요청사항 1: 프로젝트 삭제 확인 모달 (Layout 최상단으로 분리하여 완벽한 Dim 처리 보장) */}
+      {isDeleteProjectConfirmOpen && (
+         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-zinc-900/60 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
+             <div className="bg-white rounded-2xl p-6 w-[320px] shadow-2xl border border-white/20">
+                 <h3 className="text-[15px] font-black text-zinc-900 mb-2">프로젝트 삭제</h3>
+                 <p className="text-xs text-zinc-500 font-medium mb-6">정말 이 프로젝트를 삭제하시겠습니까? 관련 스위트와 테스트 런이 모두 삭제되며 복구할 수 없습니다.</p>
+                 <div className="flex justify-end gap-2.5">
+                     <button onClick={() => setIsDeleteProjectConfirmOpen(false)} className="px-4 py-2.5 rounded-xl text-xs font-bold text-zinc-500 hover:bg-zinc-100 transition-colors">취소</button>
+                     <button onClick={handleDeleteProject} className="px-4 py-2.5 rounded-xl text-xs font-bold bg-rose-500 text-white shadow-md hover:bg-rose-600 transition-colors">삭제</button>
+                 </div>
+             </div>
+         </div>
+      )}
+
       {/* Profile Modal */}
       {isProfileOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/60 backdrop-blur-md animate-in fade-in duration-300">
              <div className="bg-white/90 backdrop-blur-xl border border-white shadow-2xl rounded-3xl p-8 w-[400px] relative">
                 <button onClick={() => setIsProfileOpen(false)} className="absolute top-5 right-5 text-zinc-400 hover:text-zinc-800 transition-colors p-1 bg-zinc-100 rounded-full hover:bg-zinc-200"><X size={18}/></button>
                 <h2 className="text-lg font-black text-zinc-800 mb-6 tracking-tight">프로필 설정</h2>
@@ -534,11 +688,11 @@ export default function QAApp() {
                 <div className="space-y-4">
                     <div>
                         <label className="block text-[10px] font-black text-zinc-500 mb-1.5 ml-1 uppercase tracking-widest">Name</label>
-                        <input type="text" defaultValue={profileData.name} onBlur={(e) => setProfileData(p => ({...p, name: e.target.value}))} className="w-full bg-zinc-50/50 border-2 border-zinc-200 rounded-xl px-4 py-3 text-sm font-bold text-zinc-800 focus:outline-none focus:border-zinc-800 focus:ring-4 focus:ring-zinc-800/10 transition-all caret-zinc-800 shadow-inner" placeholder="이름을 입력하세요" />
+                        <input type="text" defaultValue={profileData.name} onBlur={(e) => setProfileData(p => ({...p, name: e.target.value}))} className="w-full bg-zinc-50/50 border-2 border-zinc-200 rounded-xl px-4 py-3 text-sm font-bold text-zinc-800 focus:outline-none focus:border-zinc-800 focus:ring-[4px] focus:ring-zinc-800/10 transition-all caret-zinc-800 shadow-inner" placeholder="이름을 입력하세요" />
                     </div>
                     <div>
                         <label className="block text-[10px] font-black text-zinc-500 mb-1.5 ml-1 uppercase tracking-widest">Nickname</label>
-                        <input type="text" defaultValue={profileData.nickname} onBlur={(e) => setProfileData(p => ({...p, nickname: e.target.value}))} className="w-full bg-zinc-50/50 border-2 border-zinc-200 rounded-xl px-4 py-3 text-sm font-bold text-zinc-800 focus:outline-none focus:border-zinc-800 focus:ring-4 focus:ring-zinc-800/10 transition-all caret-zinc-800 shadow-inner" placeholder="별명을 입력하세요 (선택)" />
+                        <input type="text" defaultValue={profileData.nickname} onBlur={(e) => setProfileData(p => ({...p, nickname: e.target.value}))} className="w-full bg-zinc-50/50 border-2 border-zinc-200 rounded-xl px-4 py-3 text-sm font-bold text-zinc-800 focus:outline-none focus:border-zinc-800 focus:ring-[4px] focus:ring-zinc-800/10 transition-all caret-zinc-800 shadow-inner" placeholder="별명을 입력하세요 (선택)" />
                     </div>
                     <button onClick={() => { setIsProfileOpen(false); setToastMessage('프로필이 업데이트되었습니다.'); }} className="w-full bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-black tracking-widest uppercase py-3.5 rounded-xl transition-all shadow-[0_4px_14px_0_rgba(24,24,27,0.39)] mt-4">
                         저장 완료
@@ -550,7 +704,7 @@ export default function QAApp() {
 
       {/* Logout Confirm Modal */}
       {isLogoutConfirmOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/60 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-900/60 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
               <div className="bg-white rounded-2xl p-6 w-[320px] shadow-2xl border border-white/20">
                   <h3 className="text-[15px] font-black text-zinc-900 mb-2">로그아웃</h3>
                   <p className="text-xs text-zinc-500 font-medium mb-6">정말 시스템에서 로그아웃 하시겠습니까?</p>
@@ -641,7 +795,7 @@ export default function QAApp() {
           </button>
         )}
 
-        <button onClick={() => setIsAdminAuth(true)} className="absolute top-6 right-6 z-50 p-2 text-zinc-400 hover:text-zinc-800 transition-all group bg-transparent">
+        <button onClick={() => setIsAdminAuth(true)} className="absolute top-8 right-8 z-50 p-2 text-zinc-400 hover:text-zinc-800 transition-all group bg-transparent">
              <Settings size={20} className="group-hover:rotate-180 duration-1000 ease-out" />
         </button>
 
@@ -699,7 +853,6 @@ export default function QAApp() {
           </div>
         </div>
 
-        {/* Admin Auth Modal - 로그인 박스 외부로 분리 및 전체 Dim 처리 */}
         {isAdminAuth && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-900/60 backdrop-blur-md animate-in fade-in duration-300">
                <div className="bg-white/90 backdrop-blur-xl border border-white p-8 rounded-3xl shadow-2xl w-[360px] animate-in zoom-in-95 duration-300 relative">
@@ -860,8 +1013,6 @@ export default function QAApp() {
     );
   }
 
-  // 기존 화면 전환 렌더링에서 currentView === 'create_project' 블록을 완전히 삭제했습니다 (이제 모달이 그 역할을 대신합니다).
-
   if (currentView === 'project') {
     const project = data.projects.find(p => p.id === activeProjectId);
     if (!project) return <Layout title="Not Found"><p>프로젝트를 찾을 수 없습니다.</p></Layout>;
@@ -869,28 +1020,18 @@ export default function QAApp() {
     const projSuites = data.suites.filter(s => s.projectId === project.id);
     const projRuns = data.runs.filter(r => r.projectId === project.id);
 
+    // 요청사항 2: 제어 컴포넌트 인한 포커스 아웃 버그 방지를 위해 name 기반 처리
     const handleUpdateProject = (e) => {
         e.preventDefault();
-        setData(prev => ({ ...prev, projects: prev.projects.map(p => p.id === activeProjectId ? { ...p, name: editProjectName } : p) }));
+        const newName = e.target.renameProject.value;
+        setData(prev => ({ ...prev, projects: prev.projects.map(p => p.id === activeProjectId ? { ...p, name: newName } : p) }));
         setIsProjectSettingsOpen(false);
         setToastMessage('프로젝트 이름이 수정되었습니다.');
     };
 
-    const handleDeleteProject = () => {
-        setData(prev => ({
-            ...prev,
-            projects: prev.projects.filter(p => p.id !== activeProjectId),
-            suites: prev.suites.filter(s => s.projectId !== activeProjectId),
-            runs: prev.runs.filter(r => r.projectId !== activeProjectId)
-        }));
-        setToastMessage('프로젝트가 삭제되었습니다.');
-        setIsDeleteProjectConfirmOpen(false);
-        setIsProjectSettingsOpen(false);
-        setCurrentView('dashboard');
-    };
-
     return (
-      <Layout title={project.name}>
+      // 요청사항 3: 프로젝트 상세 진입 시 헤더 명칭 "Project Details"로 고정
+      <Layout title="Project Details">
         <div className="flex justify-between items-start mb-6">
           <div className="flex-1">
              <div className="flex items-center gap-3 mb-1.5">
@@ -909,32 +1050,19 @@ export default function QAApp() {
                 <form onSubmit={handleUpdateProject} className="flex items-end gap-3">
                     <div className="flex-1">
                         <label className="block text-[11px] font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">Rename Project</label>
-                        <input value={editProjectName} onChange={(e) => setEditProjectName(e.target.value)} required className="w-full bg-white/50 backdrop-blur-sm border border-slate-200/80 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-zinc-500/50 focus:ring-4 focus:ring-zinc-500/10 transition-all shadow-inner" />
+                        {/* 요청사항 2: defaultValue 속성으로 비제어 폼 전환 (포커스 아웃 해결) */}
+                        <input name="renameProject" defaultValue={editProjectName} required className="w-full bg-white/50 backdrop-blur-sm border border-slate-200/80 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-zinc-500/50 focus:ring-4 focus:ring-zinc-500/10 transition-all shadow-inner" />
                     </div>
                     <button type="submit" className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-900 text-white rounded-xl text-xs font-bold shadow-[0_4px_14px_0_rgba(24,24,27,0.39)] transition-all">저장</button>
-                    {/* 요청사항 2: 프로젝트 삭제 확인 모달 호출 */}
                     <button type="button" onClick={() => setIsDeleteProjectConfirmOpen(true)} className="px-4 py-2.5 border border-rose-200/80 text-rose-600 bg-rose-50/50 hover:bg-rose-100 rounded-xl text-xs font-bold transition-all shadow-sm">삭제</button>
                     <button type="button" onClick={() => setIsProjectSettingsOpen(false)} className="px-4 py-2.5 text-slate-500 hover:bg-slate-100 rounded-xl text-xs font-bold transition-all">취소</button>
                 </form>
             </div>
         )}
 
-        {/* 요청사항 2: 프로젝트 삭제 확인 모달 */}
-        {isDeleteProjectConfirmOpen && (
-           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-zinc-900/60 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
-               <div className="bg-white rounded-2xl p-6 w-[320px] shadow-2xl border border-white/20">
-                   <h3 className="text-[15px] font-black text-zinc-900 mb-2">프로젝트 삭제</h3>
-                   <p className="text-xs text-zinc-500 font-medium mb-6">정말 이 프로젝트를 삭제하시겠습니까? 관련 스위트와 테스트 런이 모두 삭제되며 복구할 수 없습니다.</p>
-                   <div className="flex justify-end gap-2.5">
-                       <button onClick={() => setIsDeleteProjectConfirmOpen(false)} className="px-4 py-2.5 rounded-xl text-xs font-bold text-zinc-500 hover:bg-zinc-100 transition-colors">취소</button>
-                       <button onClick={handleDeleteProject} className="px-4 py-2.5 rounded-xl text-xs font-bold bg-rose-500 text-white shadow-md hover:bg-rose-600 transition-colors">삭제</button>
-                   </div>
-               </div>
-           </div>
-        )}
-
         <div className="flex items-center gap-3 mb-8">
-          <button onClick={() => setCurrentView('create_suite')} className="flex items-center gap-2 px-4 py-2.5 bg-white/80 backdrop-blur-md text-slate-700 border border-slate-200/80 hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-800 rounded-xl text-xs font-bold transition-all shadow-sm">
+          {/* 요청사항 4: 화면 이동(setCurrentView) 대신 모달 오픈 */}
+          <button onClick={() => setIsCreateSuiteModalOpen(true)} className="flex items-center gap-2 px-4 py-2.5 bg-white/80 backdrop-blur-md text-slate-700 border border-slate-200/80 hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-800 rounded-xl text-xs font-bold transition-all shadow-sm">
             <FileSpreadsheet size={16} /> 테스트 스위트 추가
           </button>
           <button onClick={() => setCurrentView('create_run')} className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-b from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white border border-emerald-500/50 rounded-xl text-xs font-bold transition-all shadow-[0_4px_14px_0_rgb(16,185,129,0.39)] hover:shadow-[0_6px_20px_rgb(16,185,129,0.23)]">
@@ -1002,132 +1130,7 @@ export default function QAApp() {
     );
   }
 
-  if (currentView === 'create_suite') {
-    const handleFileUpload = (e) => {
-      e.preventDefault();
-      const name = suiteNameInput; 
-      const file = selectedFile; 
-      
-      if (!file) { setToastMessage('파일을 선택해주세요.'); return; }
-
-      const processData = (jsonData) => {
-        if (jsonData.length < 2) { setToastMessage('데이터가 충분하지 않습니다. 헤더와 최소 1개의 데이터 행이 필요합니다.'); return; }
-
-        const rawHeaders = jsonData[0];
-        const headers = rawHeaders.map((h, i) => h ? String(h).trim() : `열 ${i+1}`);
-
-        const newCases = [];
-        const suiteId = generateId();
-        
-        for (let i = 1; i < jsonData.length; i++) {
-          const row = jsonData[i];
-          if (!row || row.length === 0) continue; 
-          
-          let title = '';
-          const titleIdx = headers.findIndex(h => /(제목|title|이름|name|tc|테스트케이스)/i.test(h.replace(/\s+/g, '')));
-          if (titleIdx !== -1 && row[titleIdx]) title = String(row[titleIdx]);
-          else if (row[0]) title = String(row[0]); 
-          else continue; 
-
-          let priority = 'Medium';
-          const priorityIdx = headers.findIndex(h => /(중요도|우선순위|priority|등급|레벨|level)/i.test(h.replace(/\s+/g, '')));
-          if (priorityIdx !== -1 && row[priorityIdx]) priority = String(row[priorityIdx]);
-
-          const fields = {};
-          headers.forEach((h, idx) => { fields[h] = row[idx] !== undefined ? String(row[idx]) : ''; });
-
-          newCases.push({ id: generateId(), suiteId: suiteId, title: title, priority: priority, fields: fields });
-        }
-
-        if(newCases.length === 0){ setToastMessage('유효한 테스트 케이스를 찾지 못했습니다.'); return; }
-
-        const newSuite = { id: suiteId, projectId: activeProjectId, name: name, headers: headers };
-        
-        setData(prev => ({ ...prev, suites: [...prev.suites, newSuite], cases: [...prev.cases, ...newCases] }));
-        setToastMessage(`성공적으로 ${newCases.length}개의 케이스를 생성했습니다!`);
-        setCurrentView('project');
-      };
-
-      const isCSV = file.name.toLowerCase().endsWith('.csv');
-      const reader = new FileReader();
-
-      if (isCSV) {
-        reader.onload = (evt) => { try { processData(parseCSV(evt.target.result)); } catch(err) { setToastMessage('CSV 파싱 오류 발생'); } };
-        reader.readAsText(file);
-      } else {
-        if (!window.XLSX) { setToastMessage('라이브러리 로딩 중... 다시 시도해주세요.'); return; }
-        reader.onload = (evt) => {
-          try {
-            const workbook = window.XLSX.read(new Uint8Array(evt.target.result), { type: 'array' });
-            processData(window.XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 }));
-          } catch (error) { setToastMessage('파일 파싱 오류. 형식을 확인해주세요.'); }
-        };
-        reader.readAsArrayBuffer(file);
-      }
-    };
-
-    return (
-      <Layout title="데이터 업로드 및 스위트 생성">
-        <div className="max-w-2xl mx-auto mt-6 bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-2xl overflow-hidden hover:shadow-[0_8px_40px_rgb(0,0,0,0.12)] transition-shadow">
-          <div className="p-6 border-b border-slate-200/50 bg-slate-50/30 backdrop-blur-md">
-            <h2 className="text-[15px] font-bold text-slate-800 flex items-center gap-2">
-              <UploadCloud className="text-zinc-600" size={20}/> 케이스 대량 임포트
-            </h2>
-            <p className="text-slate-500 text-[13px] font-medium mt-1.5">
-              Excel (.xlsx) 또는 CSV 파일을 업로드하여 스위트를 생성합니다. 문서의 첫 번째 행이 앱 내부의 항목 이름으로 자동 적용됩니다.
-            </p>
-          </div>
-          
-          <form onSubmit={handleFileUpload} className="p-8 space-y-6">
-            <div>
-              <label className="block text-[11px] font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">Test Suite Name</label>
-              <input name="suiteName" value={suiteNameInput} onChange={(e) => setSuiteNameInput(e.target.value)} required className="w-full bg-white/50 backdrop-blur-sm border border-slate-200/80 rounded-xl px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-zinc-500/50 focus:ring-4 focus:ring-zinc-500/10 transition-all shadow-inner" placeholder="예: 회원가입 시나리오 모음" />
-            </div>
-
-            <div className="bg-zinc-50/50 border border-zinc-200/50 rounded-xl p-4 shadow-sm">
-              <h4 className="text-[12px] font-bold text-zinc-800 mb-1.5 flex items-center gap-1.5">
-                <Info size={14} className="text-zinc-600"/> 동적 헤더 가이드
-              </h4>
-              <p className="text-[11px] font-medium text-zinc-600 mb-3 leading-relaxed">
-                엑셀의 첫 번째 행에 작성된 열 이름이 그대로 시스템에 등록됩니다.
-              </p>
-              <div className="flex gap-2.5 text-[11px] font-mono font-bold text-slate-600 bg-white/80 backdrop-blur-md p-3 rounded-lg border border-slate-200/60 overflow-x-auto shadow-sm">
-                <span className="text-slate-800">테스트 케이스 명</span> | <span>테스트 환경</span> | <span>기대 결과</span> | ...
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">File Attachment</label>
-              <div className={`relative border-2 border-dashed ${selectedFileName ? 'border-emerald-400/80 bg-emerald-50/50' : 'border-slate-300/80 hover:border-zinc-400/80 bg-slate-50/50'} rounded-2xl p-8 text-center transition-all duration-300 group`}>
-                <input type="file" name="excelFile" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={(e) => {
-                    const file = e.target.files[0];
-                    if (file) { setSelectedFile(file); setSelectedFileName(file.name); }
-                }} />
-                {selectedFileName ? (
-                    <>
-                        <CheckCircle size={36} className="mx-auto mb-3 text-emerald-500" />
-                        <p className="text-emerald-700 text-sm font-bold tracking-tight">{selectedFileName}</p>
-                        <p className="text-[11px] font-medium text-emerald-600 mt-1.5">성공적으로 첨부되었습니다. 클릭하여 변경.</p>
-                    </>
-                ) : (
-                    <>
-                        <FileSpreadsheet size={36} className="mx-auto mb-3 text-slate-300 group-hover:text-zinc-400 transition-colors" />
-                        <p className="text-slate-700 text-sm font-bold tracking-tight">클릭하거나 파일을 드래그하여 업로드</p>
-                        <p className="text-[11px] font-medium text-slate-400 mt-1.5">.xlsx, .xls, .csv 지원</p>
-                    </>
-                )}
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-6 mt-4 border-t border-slate-100">
-              <button type="button" onClick={() => setCurrentView('project')} className="px-5 py-2.5 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-all">취소</button>
-              <button type="submit" className="px-6 py-2.5 rounded-xl text-xs font-bold bg-zinc-800 hover:bg-zinc-900 text-white shadow-[0_4px_14px_0_rgba(24,24,27,0.39)] transition-all">업로드 및 생성</button>
-            </div>
-          </form>
-        </div>
-      </Layout>
-    );
-  }
+  // 기존 create_suite 블록은 삭제되었습니다. (Layout 내부의 isCreateSuiteModalOpen 모달로 이동)
 
   if (currentView === 'suite_detail') {
     const suite = data.suites.find(s => s.id === activeSuiteId);
@@ -1135,7 +1138,8 @@ export default function QAApp() {
 
     const handleUpdateSuite = (e) => {
         e.preventDefault();
-        setData(prev => ({ ...prev, suites: prev.suites.map(s => s.id === activeSuiteId ? { ...s, name: editSuiteName } : s) }));
+        const newName = e.target.renameSuite.value; // 포커스 아웃 버그 예방
+        setData(prev => ({ ...prev, suites: prev.suites.map(s => s.id === activeSuiteId ? { ...s, name: newName } : s) }));
         setIsSuiteSettingsOpen(false);
         setToastMessage('스위트 이름이 수정되었습니다.');
     };
@@ -1166,7 +1170,7 @@ export default function QAApp() {
                 <form onSubmit={handleUpdateSuite} className="flex items-end gap-3">
                     <div className="flex-1">
                         <label className="block text-[11px] font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">Rename Suite</label>
-                        <input value={editSuiteName} onChange={(e) => setEditSuiteName(e.target.value)} required className="w-full bg-white/50 backdrop-blur-sm border border-slate-200/80 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-zinc-500/50 focus:ring-4 focus:ring-zinc-500/10 transition-all shadow-inner" />
+                        <input name="renameSuite" defaultValue={editSuiteName} required className="w-full bg-white/50 backdrop-blur-sm border border-slate-200/80 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-zinc-500/50 focus:ring-4 focus:ring-zinc-500/10 transition-all shadow-inner" />
                     </div>
                     <button type="submit" className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-900 text-white rounded-xl text-xs font-bold shadow-[0_4px_14px_0_rgba(24,24,27,0.39)] transition-all">저장</button>
                     <button type="button" onClick={handleDeleteSuite} className="px-4 py-2.5 border border-rose-200/80 text-rose-600 bg-rose-50/50 hover:bg-rose-100 rounded-xl text-xs font-bold transition-all shadow-sm">삭제</button>
@@ -1484,7 +1488,6 @@ export default function QAApp() {
                       </div>
                     </div>
 
-                    {/* 요청 4: 표시 항목을 열(가로) 배치 구조로 변경 */}
                     {selectedHeaders.length > 0 && (
                         <div className="pl-6 flex flex-wrap gap-3 cursor-pointer" onClick={() => { setSelectedCaseId(c.id); if(!isDetailOpen) setIsDetailOpen(true); }}>
                           {selectedHeaders.map(h => {
