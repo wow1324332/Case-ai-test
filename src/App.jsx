@@ -6,7 +6,7 @@ import {
 import { 
   Play, CheckCircle, XCircle, AlertTriangle, ShieldAlert, FolderPlus, 
   FileSpreadsheet, UploadCloud, ChevronRight, LayoutDashboard, Folder, 
-  Activity, Settings, LogOut, Plus, Search, Filter, PlayCircle, Info, ChevronDown
+  Activity, Settings, LogOut, Plus, Search, Filter, PlayCircle, Info, ChevronDown, Download
 } from 'lucide-react';
 
 const getEnv = (key) => {
@@ -108,6 +108,9 @@ export default function QAApp() {
   const [suiteNameInput, setSuiteNameInput] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
 
+  // PWA 설치 프롬프트 상태
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+
   // 요청사항 2: 로그인 탭 상태 및 관리자 승인 상태
   const [loginTab, setLoginTab] = useState('login'); // 'login' or 'register'
   const [isApproved, setIsApproved] = useState(false);
@@ -134,6 +137,17 @@ export default function QAApp() {
       script.async = true;
       document.head.appendChild(script);
     }
+
+    // PWA 설치 이벤트 리스너 등록
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
   }, []);
 
   useEffect(() => {
@@ -205,6 +219,16 @@ export default function QAApp() {
     setUser({ name: name, email: id }); // 이메일 대신 ID를 표시명으로 활용
     setData(INITIAL_DATA); 
     setCurrentView('dashboard');
+  };
+
+  const handleInstallApp = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+      }
+    }
   };
 
   const Layout = ({ children, title }) => (
@@ -301,6 +325,13 @@ export default function QAApp() {
         <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-zinc-400/20 blur-[120px] animate-pulse" style={{ animationDelay: '2s' }}></div>
         
         <div className="w-full max-w-md p-10 bg-white/80 backdrop-blur-2xl rounded-[2rem] border border-white shadow-[0_8px_40px_rgba(0,0,0,0.08)] relative z-10 transition-all">
+          {/* 앱 설치 버튼 (PWA) */}
+          {deferredPrompt && (
+            <button onClick={handleInstallApp} className="absolute top-6 left-6 flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200 rounded-lg transition-all text-[11px] font-bold shadow-sm border border-zinc-200/80">
+              <Download size={14} /> 앱 설치
+            </button>
+          )}
+
           {/* 설정 버튼 */}
           <button onClick={() => setShowAdminModal(true)} className="absolute top-6 right-6 p-2 text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100 rounded-full transition-all">
             <Settings size={18} />
