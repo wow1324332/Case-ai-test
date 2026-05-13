@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, 
   PieChart, Pie, Cell, LineChart, Line 
@@ -24,7 +24,8 @@ const getEnv = (key) => {
 
 // Vercel 환경 변수를 이용한 SDK 초기화
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, getDocs, updateDoc, doc, query, where } from 'firebase/firestore';
+// 파이어베이스 실시간 동기화를 위한 onSnapshot, setDoc 추가
+import { getFirestore, collection, addDoc, getDocs, updateDoc, doc, query, where, setDoc, onSnapshot } from 'firebase/firestore';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const firebaseConfig = {
@@ -104,38 +105,32 @@ export default function QAApp() {
   const [suiteNameInput, setSuiteNameInput] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
 
-  // PWA 및 시네마틱 모달 제어 상태
   const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] = useState(false);
-  const [isCreateSuiteModalOpen, setIsCreateSuiteModalOpen] = useState(false); // 요청 4: 스위트 추가 모달 상태
+  const [isCreateSuiteModalOpen, setIsCreateSuiteModalOpen] = useState(false);
   const [isDeleteProjectConfirmOpen, setIsDeleteProjectConfirmOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-  // 로그인 모달 탭 및 관리자 상태
   const [loginTab, setLoginTab] = useState('login');
   const [isAdminAuth, setIsAdminAuth] = useState(false);
   const [adminPw, setAdminPw] = useState('');
   const [pendingUsers, setPendingUsers] = useState([]);
 
-  // PWA 설치 프롬프트 상태
   const [deferredPrompt, setDeferredPrompt] = useState(null);
-
-  // 시네마틱 스플래시 로딩 화면 상태
   const [showSplash, setShowSplash] = useState(true);
   const [isSplashFading, setIsSplashFading] = useState(false);
-  
-  // 로그인 성공 후 시네마틱 스플래시 상태
   const [isLoginSplash, setIsLoginSplash] = useState(false);
 
-  // 프로필 설정 모달 상태
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [profileData, setProfileData] = useState({ name: '', nickname: '', photo: null });
 
   const [data, setData] = useState({ projects: [], suites: [], cases: [], runs: [] });
   const [isLoaded, setIsLoaded] = useState(false);
-
-  // Suite Fold/Unfold 상태
   const [openSuites, setOpenSuites] = useState({});
+
+  // 실시간 동기화 상태 감지용 레퍼런스
+  const skipNextSync = useRef(false);
+  const [activeUsers, setActiveUsers] = useState([]);
 
   useEffect(() => {
     const fadeTimer = setTimeout(() => setIsSplashFading(true), 2000); 
@@ -168,6 +163,64 @@ export default function QAApp() {
   }, [toastMessage]);
 
   useEffect(() => {
+      if(user) setProfileData(prev => ({ ...prev, name: user.name, nickname: user.nickname, photo: user.photo }));
+  }, [user]);
+
+  // 파이어베이스 실시간 데이터 동기화 리스너 (수신) 및 헤더 유저 리스트 가져오기
+  useEffect(() => {
+      if (!user) return;
+      
+      let unsubData;
+      let unsubUsers;
+
+      if (db) {
+         unsubData = onSnapshot(doc(db, "qa_data", "shared_workspace"), (docSnap) => {
+            if (docSnap.exists()) {
+               skipNextSync.current = true; // 외부 변경에 의한 업데이트이므로 역송신(Loop) 방지
+               setData(docSnap.data());
+            } else {
+               setDoc(doc(db, "qa_data", "shared_workspace"), INITIAL_DATA);
+            }
+         });
+
+         unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
+            const usersList = [];
+            snapshot.forEach(d => {
+               if(d.data().status === 'approved') usersList.push({ id: d.id, ...d.data() });
+            });
+            setActiveUsers(usersList);
+         });
+      } else {
+         const localData = localStorage.getItem('qa_nexus_shared_data');
+         if(localData) {
+             skipNextSync.current = true;
+             setData(JSON.parse(localData));
+         }
+         const localUsers = JSON.parse(localStorage.getItem('qa_nexus_users') || '[]');
+         setActiveUsers(localUsers.filter(u => u.status === 'approved'));
+      }
+
+      return () => {
+         if(unsubData) unsubData();
+         if(unsubUsers) unsubUsers();
+      };
+  }, [user]);
+
+  // 로컬 데이터 변경 시 파이어베이스로 저장 (송신)
+  useEffect(() => {
+     if (!user) return;
+     if (skipNextSync.current) {
+         skipNextSync.current = false;
+         return;
+     }
+     if (db) {
+         setDoc(doc(db, "qa_data", "shared_workspace"), data);
+     } else {
+         localStorage.setItem('qa_nexus_shared_data', JSON.stringify(data));
+     }
+  }, [data, user]);
+
+  useEffect(() => {
     if (currentView === 'execute_run' && activeRunId) {
       const run = data.runs.find(r => r.id === activeRunId);
       if (run) {
@@ -193,10 +246,6 @@ export default function QAApp() {
     setIsSuiteSettingsOpen(false);
     setIsHeaderDropdownOpen(false);
   }, [currentView]);
-
-  useEffect(() => {
-      if(user) setProfileData(prev => ({ ...prev, name: user.name }));
-  }, [user]);
 
   const globalStyles = `
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
@@ -260,8 +309,7 @@ export default function QAApp() {
           const userData = userDoc.data();
           
           if (userData.status === 'approved') {
-            setUser({ name: userData.name, email: userData.userId });
-            setData(INITIAL_DATA);
+            setUser({ name: userData.name, email: userData.userId, dbId: userDoc.id, photo: userData.photo, nickname: userData.nickname });
             setIsLoginSplash(true);
             setTimeout(() => { setIsLoginSplash(false); setCurrentView('dashboard'); }, 3000);
           } else {
@@ -280,8 +328,7 @@ export default function QAApp() {
     const foundUser = localUsers.find(u => u.userId === inputId && u.password === inputPw);
     if (foundUser) {
        if (foundUser.status === 'approved') {
-          setUser({ name: foundUser.name, email: foundUser.userId });
-          setData(INITIAL_DATA);
+          setUser({ name: foundUser.name, email: foundUser.userId, photo: foundUser.photo, nickname: foundUser.nickname });
           setIsLoginSplash(true);
           setTimeout(() => { setIsLoginSplash(false); setCurrentView('dashboard'); }, 3000);
        } else {
@@ -408,7 +455,6 @@ export default function QAApp() {
     setToastMessage('새 프로젝트가 생성되었습니다.');
   };
 
-  // 모달 영역 내의 공통 삭제 로직 (Layout 외부에 정의하여 접근성을 확보)
   const handleDeleteProject = () => {
     setData(prev => ({
         ...prev,
@@ -422,7 +468,6 @@ export default function QAApp() {
     setCurrentView('dashboard');
   };
 
-  // 요청사항 4: 모달 영역 내의 공통 스위트 파일 업로드 처리 로직
   const handleCreateSuiteUpload = (e) => {
     e.preventDefault();
     const name = suiteNameInput; 
@@ -466,7 +511,6 @@ export default function QAApp() {
       setData(prev => ({ ...prev, suites: [...prev.suites, newSuite], cases: [...prev.cases, ...newCases] }));
       setToastMessage(`성공적으로 ${newCases.length}개의 케이스를 생성했습니다!`);
       
-      // 모달 닫기 및 초기화
       setIsCreateSuiteModalOpen(false);
       setSuiteNameInput('');
       setSelectedFile(null);
@@ -553,6 +597,23 @@ export default function QAApp() {
       <main className="flex-1 flex flex-col z-10 h-screen overflow-hidden relative">
         <header className="h-14 flex items-center justify-between px-8 border-b border-slate-200/50 bg-white/40 backdrop-blur-2xl sticky top-0 z-30 shadow-sm">
           <h2 className="text-[15px] font-bold text-slate-800 tracking-tight">{title}</h2>
+          
+          <div className="flex items-center">
+            <div className="flex -space-x-2 mr-3">
+               {activeUsers.slice(0, 5).map((u, i) => (
+                  <div key={i} className="w-7 h-7 rounded-full border-2 border-white bg-zinc-100 flex items-center justify-center overflow-hidden shadow-sm z-10 hover:z-20 transition-all hover:scale-110 cursor-pointer" title={u.name}>
+                     {u.photo ? <img src={u.photo} alt={u.name} className="w-full h-full object-cover"/> : <span className="text-[10px] font-bold text-zinc-600">{u.name.charAt(0)}</span>}
+                  </div>
+               ))}
+               {activeUsers.length > 5 && (
+                  <div className="w-7 h-7 rounded-full border-2 border-white bg-zinc-50 flex items-center justify-center shadow-sm z-10 text-[9px] font-bold text-zinc-500">
+                     +{activeUsers.length - 5}
+                  </div>
+               )}
+            </div>
+            <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse"></div>
+            <span className="text-[10px] font-bold text-slate-400 ml-2 uppercase tracking-widest">Live</span>
+          </div>
         </header>
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar relative">
           <div className={`transition-all duration-500 ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'} h-full max-w-[1600px] w-full mx-auto`}>
@@ -561,7 +622,6 @@ export default function QAApp() {
         </div>
       </main>
 
-      {/* 프로젝트 생성 모달 */}
       {isCreateProjectModalOpen && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-zinc-900/60 backdrop-blur-md animate-in fade-in duration-300">
              <div className="bg-white/90 backdrop-blur-xl border border-white shadow-2xl rounded-3xl p-8 w-[500px] relative animate-in zoom-in-95 duration-300">
@@ -587,7 +647,6 @@ export default function QAApp() {
           </div>
       )}
 
-      {/* 요청사항 4: 스위트 생성 모달 (전체 Dim 적용 및 모달화) */}
       {isCreateSuiteModalOpen && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-zinc-900/60 backdrop-blur-md animate-in fade-in duration-300">
              <div className="bg-white/90 backdrop-blur-xl border border-white shadow-2xl rounded-3xl p-8 w-[600px] max-w-[90vw] max-h-[90vh] flex flex-col relative animate-in zoom-in-95 duration-300">
@@ -596,7 +655,6 @@ export default function QAApp() {
                   <UploadCloud className="text-zinc-600" size={20}/> 테스트 스위트 추가
                 </h2>
                 
-                {/* 스크롤바 완벽 숨김 및 하단, 좌/우 짤림 방지 여백(px-2 -mx-2 pb-4) 추가 */}
                 <div className="overflow-y-auto px-2 -mx-2 pb-4 flex-1 min-h-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                   <form onSubmit={handleCreateSuiteUpload} className="space-y-6">
                     <div>
@@ -649,7 +707,6 @@ export default function QAApp() {
           </div>
       )}
 
-      {/* 요청사항 1: 프로젝트 삭제 확인 모달 (Layout 최상단으로 분리하여 완벽한 Dim 처리 보장) */}
       {isDeleteProjectConfirmOpen && (
          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-zinc-900/60 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
              <div className="bg-white rounded-2xl p-6 w-[320px] shadow-2xl border border-white/20">
@@ -663,7 +720,6 @@ export default function QAApp() {
          </div>
       )}
 
-      {/* Profile Modal */}
       {isProfileOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/60 backdrop-blur-md animate-in fade-in duration-300">
              <div className="bg-white/90 backdrop-blur-xl border border-white shadow-2xl rounded-3xl p-8 w-[400px] relative">
@@ -694,7 +750,18 @@ export default function QAApp() {
                         <label className="block text-[10px] font-black text-zinc-500 mb-1.5 ml-1 uppercase tracking-widest">Nickname</label>
                         <input type="text" defaultValue={profileData.nickname} onBlur={(e) => setProfileData(p => ({...p, nickname: e.target.value}))} className="w-full bg-zinc-50/50 border-2 border-zinc-200 rounded-xl px-4 py-3 text-sm font-bold text-zinc-800 focus:outline-none focus:border-zinc-800 focus:ring-[4px] focus:ring-zinc-800/10 transition-all caret-zinc-800 shadow-inner" placeholder="별명을 입력하세요 (선택)" />
                     </div>
-                    <button onClick={() => { setIsProfileOpen(false); setToastMessage('프로필이 업데이트되었습니다.'); }} className="w-full bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-black tracking-widest uppercase py-3.5 rounded-xl transition-all shadow-[0_4px_14px_0_rgba(24,24,27,0.39)] mt-4">
+                    <button onClick={async () => { 
+                        if (db && user?.dbId) {
+                           await updateDoc(doc(db, "users", user.dbId), { name: profileData.name, nickname: profileData.nickname, photo: profileData.photo || null });
+                        } else {
+                           const localUsers = JSON.parse(localStorage.getItem('qa_nexus_users') || '[]');
+                           const updated = localUsers.map(u => u.userId === user.email ? { ...u, name: profileData.name, nickname: profileData.nickname, photo: profileData.photo } : u);
+                           localStorage.setItem('qa_nexus_users', JSON.stringify(updated));
+                        }
+                        setUser(prev => ({ ...prev, name: profileData.name, nickname: profileData.nickname, photo: profileData.photo }));
+                        setIsProfileOpen(false); 
+                        setToastMessage('프로필이 업데이트되었습니다.'); 
+                    }} className="w-full bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-black tracking-widest uppercase py-3.5 rounded-xl transition-all shadow-[0_4px_14px_0_rgba(24,24,27,0.39)] mt-4">
                         저장 완료
                     </button>
                 </div>
@@ -702,7 +769,6 @@ export default function QAApp() {
           </div>
       )}
 
-      {/* Logout Confirm Modal */}
       {isLogoutConfirmOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-900/60 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
               <div className="bg-white rounded-2xl p-6 w-[320px] shadow-2xl border border-white/20">
@@ -1020,7 +1086,6 @@ export default function QAApp() {
     const projSuites = data.suites.filter(s => s.projectId === project.id);
     const projRuns = data.runs.filter(r => r.projectId === project.id);
 
-    // 요청사항 2: 제어 컴포넌트 인한 포커스 아웃 버그 방지를 위해 name 기반 처리
     const handleUpdateProject = (e) => {
         e.preventDefault();
         const newName = e.target.renameProject.value;
@@ -1030,7 +1095,6 @@ export default function QAApp() {
     };
 
     return (
-      // 요청사항 3: 프로젝트 상세 진입 시 헤더 명칭 "Project Details"로 고정
       <Layout title="Project Details">
         <div className="flex justify-between items-start mb-6">
           <div className="flex-1">
@@ -1050,7 +1114,6 @@ export default function QAApp() {
                 <form onSubmit={handleUpdateProject} className="flex items-end gap-3">
                     <div className="flex-1">
                         <label className="block text-[11px] font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">Rename Project</label>
-                        {/* 요청사항 2: defaultValue 속성으로 비제어 폼 전환 (포커스 아웃 해결) */}
                         <input name="renameProject" defaultValue={editProjectName} required className="w-full bg-white/50 backdrop-blur-sm border border-slate-200/80 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-zinc-500/50 focus:ring-4 focus:ring-zinc-500/10 transition-all shadow-inner" />
                     </div>
                     <button type="submit" className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-900 text-white rounded-xl text-xs font-bold shadow-[0_4px_14px_0_rgba(24,24,27,0.39)] transition-all">저장</button>
@@ -1061,7 +1124,6 @@ export default function QAApp() {
         )}
 
         <div className="flex items-center gap-3 mb-8">
-          {/* 요청사항 4: 화면 이동(setCurrentView) 대신 모달 오픈 */}
           <button onClick={() => setIsCreateSuiteModalOpen(true)} className="flex items-center gap-2 px-4 py-2.5 bg-white/80 backdrop-blur-md text-slate-700 border border-slate-200/80 hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-800 rounded-xl text-xs font-bold transition-all shadow-sm">
             <FileSpreadsheet size={16} /> 테스트 스위트 추가
           </button>
@@ -1130,15 +1192,13 @@ export default function QAApp() {
     );
   }
 
-  // 기존 create_suite 블록은 삭제되었습니다. (Layout 내부의 isCreateSuiteModalOpen 모달로 이동)
-
   if (currentView === 'suite_detail') {
     const suite = data.suites.find(s => s.id === activeSuiteId);
     const cases = data.cases.filter(c => c.suiteId === activeSuiteId);
 
     const handleUpdateSuite = (e) => {
         e.preventDefault();
-        const newName = e.target.renameSuite.value; // 포커스 아웃 버그 예방
+        const newName = e.target.renameSuite.value; 
         setData(prev => ({ ...prev, suites: prev.suites.map(s => s.id === activeSuiteId ? { ...s, name: newName } : s) }));
         setIsSuiteSettingsOpen(false);
         setToastMessage('스위트 이름이 수정되었습니다.');
