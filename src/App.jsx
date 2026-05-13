@@ -104,6 +104,11 @@ export default function QAApp() {
   const [suiteNameInput, setSuiteNameInput] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
 
+  // PWA 및 시네마틱 모달 제어 상태
+  const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] = useState(false);
+  const [isDeleteProjectConfirmOpen, setIsDeleteProjectConfirmOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
   // 로그인 모달 탭 및 관리자 상태
   const [loginTab, setLoginTab] = useState('login');
   const [isAdminAuth, setIsAdminAuth] = useState(false);
@@ -127,6 +132,9 @@ export default function QAApp() {
 
   const [data, setData] = useState({ projects: [], suites: [], cases: [], runs: [] });
   const [isLoaded, setIsLoaded] = useState(false);
+
+  // Suite Fold/Unfold 상태 (Hook 규칙을 지키기 위해 조건문 밖으로 이동)
+  const [openSuites, setOpenSuites] = useState({});
 
   useEffect(() => {
     const fadeTimer = setTimeout(() => setIsSplashFading(true), 2000); 
@@ -388,52 +396,77 @@ export default function QAApp() {
       }
   };
 
+  // 요청사항 1: 프로젝트 추가 모달 핸들러
+  const handleCreateProject = (e) => {
+    e.preventDefault();
+    const newProj = {
+      id: generateId(),
+      name: e.target.name.value,
+      description: e.target.desc.value
+    };
+    setData(prev => ({ ...prev, projects: [...prev.projects, newProj] }));
+    setActiveProjectId(newProj.id);
+    setIsCreateProjectModalOpen(false);
+    setCurrentView('project');
+    setToastMessage('새 프로젝트가 생성되었습니다.');
+  };
+
   const Layout = ({ children, title }) => (
     <div className="flex h-screen bg-[#f8fafc] bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-50/40 via-[#f8fafc] to-slate-100 text-slate-800 font-sans overflow-hidden selection:bg-blue-200/50">
       <style>{globalStyles}</style>
       
-      <aside className="w-60 bg-white/60 backdrop-blur-2xl border-r border-slate-200/50 flex flex-col z-20 shadow-[4px_0_24px_rgb(0,0,0,0.02)]">
-        <div className="h-14 flex items-center gap-2.5 px-5 border-b border-slate-200/50">
-          <img src="/icon-192x192.png" className="w-6 h-6 object-contain" alt="Logo" onError={(e) => { e.target.onerror = null; e.target.outerHTML = "<div class='w-7 h-7 rounded-lg bg-zinc-800 flex items-center justify-center shadow-md'><svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/></svg></div>"; }}/>
-          <h1 className="text-[15px] font-bold text-zinc-800 tracking-tight">Caseai</h1>
-        </div>
-        
-        <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto custom-scrollbar">
-          <NavItem icon={<LayoutDashboard size={18}/>} label="대시보드" active={currentView === 'dashboard'} onClick={() => setCurrentView('dashboard')} />
-          <div className="pt-6 pb-2 px-2 text-[10px] font-bold text-slate-400 tracking-wider uppercase">Projects</div>
-          {data.projects.map(p => (
-            <NavItem 
-              key={p.id} 
-              icon={<Folder size={16}/>} 
-              label={p.name} 
-              active={currentView === 'project' && activeProjectId === p.id} 
-              onClick={() => { setActiveProjectId(p.id); setCurrentView('project'); }} 
-            />
-          ))}
-          <button 
-            onClick={() => setCurrentView('create_project')}
-            className="w-full flex items-center gap-2 px-3 py-2.5 mt-4 rounded-xl text-xs font-semibold text-slate-500 hover:text-zinc-800 hover:bg-white/80 transition-all border border-dashed border-slate-300 hover:border-zinc-400 hover:shadow-sm"
-          >
-            <Plus size={16} /> 프로젝트 추가
-          </button>
-        </nav>
+      {/* 요청사항 4: 시네마틱 접이식 사이드바 (사이드바 제어 핸들 추가) */}
+      <button
+        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+        className={`fixed top-1/2 -translate-y-1/2 z-40 w-5 h-16 bg-white/90 backdrop-blur-md border border-slate-200/80 rounded-r-xl shadow-[4px_0_15px_rgba(0,0,0,0.05)] flex items-center justify-center text-slate-400 hover:text-zinc-800 transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] hover:w-6 hover:bg-white cursor-pointer ${isSidebarOpen ? 'left-60' : 'left-0'}`}
+      >
+        <ChevronRight size={14} className={`transition-transform duration-500 ${isSidebarOpen ? 'rotate-180' : ''}`} />
+      </button>
 
-        <div className="p-4 border-t border-slate-200/50 bg-white/40 backdrop-blur-md relative">
-          <div onClick={() => setIsProfileOpen(true)} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/80 transition-colors border border-transparent hover:border-white hover:shadow-sm cursor-pointer group">
-            {profileData.photo ? (
-                <img src={profileData.photo} className="w-8 h-8 rounded-full object-cover border border-white shadow-sm" alt="Profile"/>
-            ) : (
-                <div className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center text-xs font-bold text-zinc-600 shadow-inner border border-white">
-                  {user?.name.charAt(0)}
-                </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold text-zinc-800 truncate">{profileData.nickname || user?.name}</p>
-              <p className="text-[10px] text-zinc-500 truncate">{user?.email}</p>
-            </div>
-            <button onClick={(e) => { e.stopPropagation(); setIsLogoutConfirmOpen(true); }} className="text-zinc-400 hover:text-rose-500 transition-colors p-1.5 rounded-lg hover:bg-rose-50 opacity-0 group-hover:opacity-100">
-              <LogOut size={16} />
+      <aside className={`transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] bg-white/60 backdrop-blur-2xl flex flex-col z-20 shadow-[4px_0_24px_rgb(0,0,0,0.02)] relative ${isSidebarOpen ? 'w-60 border-r border-slate-200/50' : 'w-0 border-r-0'}`}>
+        <div className={`w-60 h-full flex flex-col overflow-hidden transition-opacity duration-500 ${isSidebarOpen ? 'opacity-100' : 'opacity-0'}`}>
+          <div className="h-14 flex items-center gap-2.5 px-5 border-b border-slate-200/50 shrink-0">
+            <img src="/icon-192x192.png" className="w-6 h-6 object-contain" alt="Logo" onError={(e) => { e.target.onerror = null; e.target.outerHTML = "<div class='w-7 h-7 rounded-lg bg-zinc-800 flex items-center justify-center shadow-md'><svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/></svg></div>"; }}/>
+            <h1 className="text-[15px] font-bold text-zinc-800 tracking-tight">Caseai</h1>
+          </div>
+          
+          <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto custom-scrollbar">
+            <NavItem icon={<LayoutDashboard size={18}/>} label="대시보드" active={currentView === 'dashboard'} onClick={() => setCurrentView('dashboard')} />
+            <div className="pt-6 pb-2 px-2 text-[10px] font-bold text-slate-400 tracking-wider uppercase">Projects</div>
+            {data.projects.map(p => (
+              <NavItem 
+                key={p.id} 
+                icon={<Folder size={16}/>} 
+                label={p.name} 
+                active={currentView === 'project' && activeProjectId === p.id} 
+                onClick={() => { setActiveProjectId(p.id); setCurrentView('project'); }} 
+              />
+            ))}
+            <button 
+              onClick={() => setIsCreateProjectModalOpen(true)}
+              className="w-full flex items-center gap-2 px-3 py-2.5 mt-4 rounded-xl text-xs font-semibold text-slate-500 hover:text-zinc-800 hover:bg-white/80 transition-all border border-dashed border-slate-300 hover:border-zinc-400 hover:shadow-sm"
+            >
+              <Plus size={16} /> 프로젝트 추가
             </button>
+          </nav>
+
+          <div className="p-4 border-t border-slate-200/50 bg-white/40 backdrop-blur-md relative shrink-0">
+            <div onClick={() => setIsProfileOpen(true)} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/80 transition-colors border border-transparent hover:border-white hover:shadow-sm cursor-pointer group">
+              {profileData.photo ? (
+                  <img src={profileData.photo} className="w-8 h-8 rounded-full object-cover border border-white shadow-sm" alt="Profile"/>
+              ) : (
+                  <div className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center text-xs font-bold text-zinc-600 shadow-inner border border-white">
+                    {user?.name.charAt(0)}
+                  </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-zinc-800 truncate">{profileData.nickname || user?.name}</p>
+                <p className="text-[10px] text-zinc-500 truncate">{user?.email}</p>
+              </div>
+              <button onClick={(e) => { e.stopPropagation(); setIsLogoutConfirmOpen(true); }} className="text-zinc-400 hover:text-rose-500 transition-colors p-1.5 rounded-lg hover:bg-rose-50 opacity-0 group-hover:opacity-100">
+                <LogOut size={16} />
+              </button>
+            </div>
           </div>
         </div>
       </aside>
@@ -442,12 +475,39 @@ export default function QAApp() {
         <header className="h-14 flex items-center justify-between px-8 border-b border-slate-200/50 bg-white/40 backdrop-blur-2xl sticky top-0 z-30 shadow-sm">
           <h2 className="text-[15px] font-bold text-slate-800 tracking-tight">{title}</h2>
         </header>
+        {/* 요청사항 3: 넓은 해상도 활용을 위해 max-w-6xl -> max-w-[1600px] 로 확장 */}
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar relative">
-          <div className={`transition-all duration-500 ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'} h-full max-w-6xl mx-auto`}>
+          <div className={`transition-all duration-500 ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'} h-full max-w-[1600px] w-full mx-auto`}>
             {children}
           </div>
         </div>
       </main>
+
+      {/* 요청사항 1: 프로젝트 생성 모달 (입력 테두리 깜빡임 해결) */}
+      {isCreateProjectModalOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm animate-in fade-in duration-300">
+             <div className="bg-white/90 backdrop-blur-xl border border-white shadow-2xl rounded-3xl p-8 w-[500px] relative animate-in zoom-in-95 duration-300">
+                <button onClick={() => setIsCreateProjectModalOpen(false)} className="absolute top-5 right-5 text-zinc-400 hover:text-zinc-800 transition-colors p-1 bg-zinc-100 rounded-full hover:bg-zinc-200"><X size={18}/></button>
+                <h2 className="text-[15px] font-black text-slate-800 mb-6 flex items-center gap-2">
+                  <FolderPlus size={18} className="text-zinc-600"/> 새 프로젝트 생성
+                </h2>
+                <form onSubmit={handleCreateProject} className="space-y-5">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">Project Name</label>
+                    <input name="name" required className="w-full bg-zinc-50/50 border-2 border-zinc-200 rounded-xl px-4 py-3.5 text-sm font-bold text-zinc-900 focus:outline-none focus:border-zinc-800 focus:ring-[4px] focus:ring-zinc-800/10 transition-all duration-500 caret-zinc-800 shadow-inner" placeholder="예: 모바일 앱 리뉴얼 v3.0" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">Description (Optional)</label>
+                    <textarea name="desc" rows={4} className="w-full bg-zinc-50/50 border-2 border-zinc-200 rounded-xl px-4 py-3 text-sm font-bold text-zinc-900 focus:outline-none focus:border-zinc-800 focus:ring-[4px] focus:ring-zinc-800/10 transition-all duration-500 resize-none caret-zinc-800 shadow-inner" placeholder="프로젝트의 목적이나 주요 내용을 간략히 적어주세요."></textarea>
+                  </div>
+                  <div className="flex justify-end gap-3 pt-6 mt-4 border-t border-slate-100/80">
+                    <button type="button" onClick={() => setIsCreateProjectModalOpen(false)} className="px-5 py-2.5 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-all">취소</button>
+                    <button type="submit" className="px-6 py-2.5 rounded-xl text-xs font-bold bg-zinc-900 hover:bg-zinc-800 text-white shadow-[0_4px_14px_0_rgba(24,24,27,0.39)] transition-all">프로젝트 생성</button>
+                  </div>
+                </form>
+             </div>
+          </div>
+      )}
 
       {/* Profile Modal */}
       {isProfileOpen && (
@@ -800,45 +860,7 @@ export default function QAApp() {
     );
   }
 
-  if (currentView === 'create_project') {
-    const handleCreateProject = (e) => {
-      e.preventDefault();
-      const newProj = {
-        id: generateId(),
-        name: e.target.name.value,
-        description: e.target.desc.value
-      };
-      setData(prev => ({ ...prev, projects: [...prev.projects, newProj] }));
-      setActiveProjectId(newProj.id);
-      setCurrentView('project');
-    };
-
-    return (
-      <Layout title="새 프로젝트 생성">
-        <div className="max-w-xl mx-auto mt-8">
-          <div className="bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-2xl p-8 animate-in fade-in slide-in-from-bottom-4 duration-500 hover:shadow-[0_8px_40px_rgb(0,0,0,0.12)] transition-shadow">
-            <h2 className="text-[15px] font-bold text-slate-800 mb-6 flex items-center gap-2">
-              <FolderPlus size={18} className="text-zinc-600"/> 프로젝트 정보 입력
-            </h2>
-            <form onSubmit={handleCreateProject} className="space-y-5">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">Project Name</label>
-                <input name="name" required className="w-full bg-white/50 backdrop-blur-sm border border-slate-200/80 rounded-xl px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-zinc-500/50 focus:ring-4 focus:ring-zinc-500/10 transition-all shadow-inner" placeholder="예: 모바일 앱 리뉴얼 v3.0" />
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">Description (Optional)</label>
-                <textarea name="desc" rows={4} className="w-full bg-white/50 backdrop-blur-sm border border-slate-200/80 rounded-xl px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-zinc-500/50 focus:ring-4 focus:ring-zinc-500/10 transition-all resize-none shadow-inner" placeholder="프로젝트의 목적이나 주요 내용을 간략히 적어주세요."></textarea>
-              </div>
-              <div className="flex justify-end gap-3 pt-6 mt-4">
-                <button type="button" onClick={() => setCurrentView('dashboard')} className="px-5 py-2.5 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-all">취소</button>
-                <button type="submit" className="px-6 py-2.5 rounded-xl text-xs font-bold bg-zinc-800 hover:bg-zinc-900 text-white shadow-[0_4px_14px_0_rgba(24,24,27,0.39)] hover:shadow-[0_6px_20px_rgba(24,24,27,0.23)] transition-all">프로젝트 생성</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </Layout>
-    );
-  }
+  // 기존 화면 전환 렌더링에서 currentView === 'create_project' 블록을 완전히 삭제했습니다 (이제 모달이 그 역할을 대신합니다).
 
   if (currentView === 'project') {
     const project = data.projects.find(p => p.id === activeProjectId);
@@ -862,6 +884,7 @@ export default function QAApp() {
             runs: prev.runs.filter(r => r.projectId !== activeProjectId)
         }));
         setToastMessage('프로젝트가 삭제되었습니다.');
+        setIsDeleteProjectConfirmOpen(false);
         setIsProjectSettingsOpen(false);
         setCurrentView('dashboard');
     };
@@ -881,7 +904,7 @@ export default function QAApp() {
         </div>
 
         {isProjectSettingsOpen && (
-            <div className="mb-6 p-5 bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="mb-6 p-5 bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300 relative z-10">
                 <h3 className="text-[13px] font-bold text-slate-800 mb-4 flex items-center gap-1.5"><Settings size={14}/> 프로젝트 설정</h3>
                 <form onSubmit={handleUpdateProject} className="flex items-end gap-3">
                     <div className="flex-1">
@@ -889,10 +912,25 @@ export default function QAApp() {
                         <input value={editProjectName} onChange={(e) => setEditProjectName(e.target.value)} required className="w-full bg-white/50 backdrop-blur-sm border border-slate-200/80 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-zinc-500/50 focus:ring-4 focus:ring-zinc-500/10 transition-all shadow-inner" />
                     </div>
                     <button type="submit" className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-900 text-white rounded-xl text-xs font-bold shadow-[0_4px_14px_0_rgba(24,24,27,0.39)] transition-all">저장</button>
-                    <button type="button" onClick={handleDeleteProject} className="px-4 py-2.5 border border-rose-200/80 text-rose-600 bg-rose-50/50 hover:bg-rose-100 rounded-xl text-xs font-bold transition-all shadow-sm">삭제</button>
+                    {/* 요청사항 2: 프로젝트 삭제 확인 모달 호출 */}
+                    <button type="button" onClick={() => setIsDeleteProjectConfirmOpen(true)} className="px-4 py-2.5 border border-rose-200/80 text-rose-600 bg-rose-50/50 hover:bg-rose-100 rounded-xl text-xs font-bold transition-all shadow-sm">삭제</button>
                     <button type="button" onClick={() => setIsProjectSettingsOpen(false)} className="px-4 py-2.5 text-slate-500 hover:bg-slate-100 rounded-xl text-xs font-bold transition-all">취소</button>
                 </form>
             </div>
+        )}
+
+        {/* 요청사항 2: 프로젝트 삭제 확인 모달 */}
+        {isDeleteProjectConfirmOpen && (
+           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-zinc-900/60 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
+               <div className="bg-white rounded-2xl p-6 w-[320px] shadow-2xl border border-white/20">
+                   <h3 className="text-[15px] font-black text-zinc-900 mb-2">프로젝트 삭제</h3>
+                   <p className="text-xs text-zinc-500 font-medium mb-6">정말 이 프로젝트를 삭제하시겠습니까? 관련 스위트와 테스트 런이 모두 삭제되며 복구할 수 없습니다.</p>
+                   <div className="flex justify-end gap-2.5">
+                       <button onClick={() => setIsDeleteProjectConfirmOpen(false)} className="px-4 py-2.5 rounded-xl text-xs font-bold text-zinc-500 hover:bg-zinc-100 transition-colors">취소</button>
+                       <button onClick={handleDeleteProject} className="px-4 py-2.5 rounded-xl text-xs font-bold bg-rose-500 text-white shadow-md hover:bg-rose-600 transition-colors">삭제</button>
+                   </div>
+               </div>
+           </div>
         )}
 
         <div className="flex items-center gap-3 mb-8">
@@ -1171,9 +1209,6 @@ export default function QAApp() {
   if (currentView === 'create_run') {
     const projSuites = data.suites.filter(s => s.projectId === activeProjectId);
     
-    // Suite Fold/Unfold 상태 추가
-    const [openSuites, setOpenSuites] = useState({});
-
     const handleCaseToggle = (caseId) => { setSelectedRunCases(prev => prev.includes(caseId) ? prev.filter(id => id !== caseId) : [...prev, caseId]); };
     const handleSuiteToggle = (suiteId, isChecked) => {
         const suiteCases = data.cases.filter(c => c.suiteId === suiteId).map(c=>c.id);
