@@ -130,6 +130,7 @@ export default function QAApp() {
 
   // 실시간 동기화 상태 감지용 레퍼런스
   const skipNextSync = useRef(false);
+  const isInitialSyncDone = useRef(false); // 추가: 초기 데이터 로드 완료 여부 추적
   const [activeUsers, setActiveUsers] = useState([]);
 
   useEffect(() => {
@@ -168,7 +169,10 @@ export default function QAApp() {
 
   // 파이어베이스 실시간 데이터 동기화 리스너 (수신) 및 헤더 유저 리스트 가져오기
   useEffect(() => {
-      if (!user) return;
+      if (!user) {
+          isInitialSyncDone.current = false; // 로그아웃 시 동기화 상태 초기화
+          return;
+      }
       
       let unsubData;
       let unsubUsers;
@@ -178,8 +182,10 @@ export default function QAApp() {
             if (docSnap.exists()) {
                skipNextSync.current = true; // 외부 변경에 의한 업데이트이므로 역송신(Loop) 방지
                setData(docSnap.data());
+               isInitialSyncDone.current = true; // 수신 완료 마킹
             } else {
                setDoc(doc(db, "qa_data", "shared_workspace"), INITIAL_DATA);
+               isInitialSyncDone.current = true; // 최초 생성 완료 마킹
             }
          });
 
@@ -196,6 +202,7 @@ export default function QAApp() {
              skipNextSync.current = true;
              setData(JSON.parse(localData));
          }
+         isInitialSyncDone.current = true; // 수신 완료 마킹
          const localUsers = JSON.parse(localStorage.getItem('qa_nexus_users') || '[]');
          setActiveUsers(localUsers.filter(u => u.status === 'approved'));
       }
@@ -208,7 +215,7 @@ export default function QAApp() {
 
   // 로컬 데이터 변경 시 파이어베이스로 저장 (송신)
   useEffect(() => {
-     if (!user) return;
+     if (!isInitialSyncDone.current) return; // 추가: 데이터를 완벽히 불러오기 전엔 절대 덮어쓰지 않음
      if (skipNextSync.current) {
          skipNextSync.current = false;
          return;
@@ -218,7 +225,7 @@ export default function QAApp() {
      } else {
          localStorage.setItem('qa_nexus_shared_data', JSON.stringify(data));
      }
-  }, [data, user]);
+  }, [data]); // user 의존성 제거 (로그인 시 불필요한 송신 방지)
 
   useEffect(() => {
     if (currentView === 'execute_run' && activeRunId) {
@@ -435,7 +442,28 @@ export default function QAApp() {
       if (file) {
           const reader = new FileReader();
           reader.onload = (evt) => {
-             setProfileData(prev => ({ ...prev, photo: evt.target.result }));
+             // 파이어베이스 1MB 용량 제한을 우회하기 위한 캔버스 자동 리사이징(압축) 로직 추가
+             const img = new Image();
+             img.onload = () => {
+                 const canvas = document.createElement('canvas');
+                 const MAX_SIZE = 256;
+                 let width = img.width;
+                 let height = img.height;
+                 
+                 if (width > height) {
+                     if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; }
+                 } else {
+                     if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; }
+                 }
+                 canvas.width = width;
+                 canvas.height = height;
+                 
+                 const ctx = canvas.getContext('2d');
+                 ctx.drawImage(img, 0, 0, width, height);
+                 const dataUrl = canvas.toDataURL('image/jpeg', 0.8); // 80% 화질로 압축
+                 setProfileData(prev => ({ ...prev, photo: dataUrl }));
+             };
+             img.src = evt.target.result;
           };
           reader.readAsDataURL(file);
       }
@@ -751,16 +779,21 @@ export default function QAApp() {
                         <input type="text" defaultValue={profileData.nickname} onBlur={(e) => setProfileData(p => ({...p, nickname: e.target.value}))} className="w-full bg-zinc-50/50 border-2 border-zinc-200 rounded-xl px-4 py-3 text-sm font-bold text-zinc-800 focus:outline-none focus:border-zinc-800 focus:ring-[4px] focus:ring-zinc-800/10 transition-all caret-zinc-800 shadow-inner" placeholder="별명을 입력하세요 (선택)" />
                     </div>
                     <button onClick={async () => { 
-                        if (db && user?.dbId) {
-                           await updateDoc(doc(db, "users", user.dbId), { name: profileData.name, nickname: profileData.nickname, photo: profileData.photo || null });
-                        } else {
-                           const localUsers = JSON.parse(localStorage.getItem('qa_nexus_users') || '[]');
-                           const updated = localUsers.map(u => u.userId === user.email ? { ...u, name: profileData.name, nickname: profileData.nickname, photo: profileData.photo } : u);
-                           localStorage.setItem('qa_nexus_users', JSON.stringify(updated));
+                        try {
+                            if (db && user?.dbId) {
+                               await updateDoc(doc(db, "users", user.dbId), { name: profileData.name, nickname: profileData.nickname, photo: profileData.photo || null });
+                            } else {
+                               const localUsers = JSON.parse(localStorage.getItem('qa_nexus_users') || '[]');
+                               const updated = localUsers.map(u => u.userId === user.email ? { ...u, name: profileData.name, nickname: profileData.nickname, photo: profileData.photo } : u);
+                               localStorage.setItem('qa_nexus_users', JSON.stringify(updated));
+                            }
+                            setUser(prev => ({ ...prev, name: profileData.name, nickname: profileData.nickname, photo: profileData.photo }));
+                            setIsProfileOpen(false); 
+                            setToastMessage('프로필이 업데이트되었습니다.'); 
+                        } catch (error) {
+                            console.error("Profile update error:", error);
+                            setToastMessage('업데이트 실패: 잠시 후 다시 시도해주세요.');
                         }
-                        setUser(prev => ({ ...prev, name: profileData.name, nickname: profileData.nickname, photo: profileData.photo }));
-                        setIsProfileOpen(false); 
-                        setToastMessage('프로필이 업데이트되었습니다.'); 
                     }} className="w-full bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-black tracking-widest uppercase py-3.5 rounded-xl transition-all shadow-[0_4px_14px_0_rgba(24,24,27,0.39)] mt-4">
                         저장 완료
                     </button>
