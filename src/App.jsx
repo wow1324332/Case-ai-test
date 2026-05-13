@@ -111,6 +111,9 @@ export default function QAApp() {
   // PWA 설치 프롬프트 상태
   const [deferredPrompt, setDeferredPrompt] = useState(null);
 
+  // 시네마틱 스플래시 로딩 화면 상태
+  const [showSplash, setShowSplash] = useState(true);
+
   // 요청사항 2: 로그인 탭 상태 및 관리자 승인 상태
   const [loginTab, setLoginTab] = useState('login'); // 'login' or 'register'
   const [isApproved, setIsApproved] = useState(false);
@@ -128,6 +131,12 @@ export default function QAApp() {
   });
 
   const [isLoaded, setIsLoaded] = useState(false);
+
+  // 스플래시 화면 타이머
+  useEffect(() => {
+    const timer = setTimeout(() => setShowSplash(false), 2500); // 2.5초 후 로딩 종료
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => { 
     setIsLoaded(true); 
@@ -317,6 +326,33 @@ export default function QAApp() {
     </button>
   );
 
+  if (showSplash) {
+    return (
+      <div className="h-screen w-screen bg-[#f4f4f5] flex flex-col items-center justify-center relative overflow-hidden font-sans">
+        <style>{globalStyles}</style>
+        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-zinc-300/30 blur-[120px] animate-pulse"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-zinc-400/20 blur-[120px] animate-pulse" style={{ animationDelay: '1s' }}></div>
+        
+        <div className="z-10 flex flex-col items-center animate-in fade-in zoom-in duration-1000">
+          <div className="w-24 h-24 mb-6 rounded-3xl bg-white shadow-[0_20px_60px_rgba(24,24,27,0.05)] flex items-center justify-center overflow-hidden border border-zinc-200/50 p-4">
+             <img src="/icon-192x192.png" alt="Caseai App Icon" className="w-full h-full object-contain drop-shadow-md" onError={(e) => { e.target.onerror = null; e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3Cpath d='M12 8v4'/%3E%3Cpath d='M12 16h.01'/%3E%3C/svg%3E"; }} />
+          </div>
+          <h1 className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-zinc-900 to-zinc-600 tracking-tight">Caseai</h1>
+          <div className="mt-8 w-32 h-1 bg-zinc-200 rounded-full overflow-hidden">
+            <div className="h-full bg-zinc-800 rounded-full animate-[loading_2s_ease-in-out_forwards]"></div>
+          </div>
+        </div>
+        <style>{`
+          @keyframes loading {
+            0% { width: 0%; transform: translateX(-100%); }
+            50% { width: 70%; transform: translateX(0); }
+            100% { width: 100%; transform: translateX(0); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
   if (currentView === 'login') {
     return (
       <div className="min-h-screen flex items-center justify-center relative overflow-hidden font-sans bg-[#f4f4f5]">
@@ -338,10 +374,10 @@ export default function QAApp() {
           </button>
 
           <div className="flex flex-col items-center mb-6">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-zinc-700 to-zinc-900 flex items-center justify-center mb-4 shadow-[0_8px_20px_rgba(24,24,27,0.3)]">
-              <ShieldAlert size={28} className="text-white" />
+            <div className="w-14 h-14 rounded-2xl bg-white flex items-center justify-center mb-4 shadow-[0_8px_20px_rgba(24,24,27,0.08)] border border-zinc-200/50 p-2.5">
+              <img src="/icon-192x192.png" alt="Caseai App Icon" className="w-full h-full object-contain" onError={(e) => { e.target.onerror = null; e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3Cpath d='M12 8v4'/%3E%3Cpath d='M12 16h.01'/%3E%3C/svg%3E"; }} />
             </div>
-            <h1 className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-zinc-900 to-zinc-700 tracking-tight text-center">QA NEXUS</h1>
+            <h1 className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-zinc-900 to-zinc-700 tracking-tight text-center">Caseai</h1>
             <p className="text-zinc-500 mt-1.5 text-xs font-medium text-center">프리미엄 엔터프라이즈 테스트 플랫폼</p>
           </div>
 
