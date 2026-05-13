@@ -334,8 +334,8 @@ export default function QAApp() {
         <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-zinc-400/20 blur-[120px] animate-pulse" style={{ animationDelay: '1s' }}></div>
         
         <div className="z-10 flex flex-col items-center animate-in fade-in zoom-in duration-1000">
-          <div className="w-24 h-24 mb-6 rounded-3xl bg-white shadow-[0_20px_60px_rgba(24,24,27,0.05)] flex items-center justify-center overflow-hidden border border-zinc-200/50 p-4">
-             <img src="/icon-192x192.png" alt="Caseai App Icon" className="w-full h-full object-contain drop-shadow-md" onError={(e) => { e.target.onerror = null; e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3Cpath d='M12 8v4'/%3E%3Cpath d='M12 16h.01'/%3E%3C/svg%3E"; }} />
+          <div className="w-36 h-36 mb-6 flex items-center justify-center overflow-visible">
+             <img src="/icon-192x192.png" alt="Caseai App Icon" className="w-full h-full object-contain drop-shadow-2xl" onError={(e) => { e.target.onerror = null; e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3Cpath d='M12 8v4'/%3E%3Cpath d='M12 16h.01'/%3E%3C/svg%3E"; }} />
           </div>
           <h1 className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-zinc-900 to-zinc-600 tracking-tight">Caseai</h1>
           <div className="mt-8 w-32 h-1 bg-zinc-200 rounded-full overflow-hidden">
@@ -374,8 +374,8 @@ export default function QAApp() {
           </button>
 
           <div className="flex flex-col items-center mb-6">
-            <div className="w-14 h-14 rounded-2xl bg-white flex items-center justify-center mb-4 shadow-[0_8px_20px_rgba(24,24,27,0.08)] border border-zinc-200/50 p-2.5">
-              <img src="/icon-192x192.png" alt="Caseai App Icon" className="w-full h-full object-contain" onError={(e) => { e.target.onerror = null; e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3Cpath d='M12 8v4'/%3E%3Cpath d='M12 16h.01'/%3E%3C/svg%3E"; }} />
+            <div className="w-20 h-20 rounded-3xl bg-white flex items-center justify-center mb-4 shadow-[0_8px_20px_rgba(24,24,27,0.08)] border border-zinc-200/50 p-3">
+              <img src="/icon-192x192.png" alt="Caseai App Icon" className="w-full h-full object-contain" onError={(e) => { e.target.onerror = null; e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3Cpath d='M12 8v4'/%3E%3Cpath d='M12 16h.01'/%3E%3C/svg%3E"; }} />
             </div>
             <h1 className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-zinc-900 to-zinc-700 tracking-tight text-center">Caseai</h1>
             <p className="text-zinc-500 mt-1.5 text-xs font-medium text-center">프리미엄 엔터프라이즈 테스트 플랫폼</p>
