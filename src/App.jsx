@@ -113,6 +113,7 @@ export default function QAApp() {
 
   // 시네마틱 스플래시 로딩 화면 상태
   const [showSplash, setShowSplash] = useState(true);
+  const [isSplashFading, setIsSplashFading] = useState(false);
   
   // 요청사항 1: 로그인 성공 후 시네마틱 스플래시 상태
   const [isLoginSplash, setIsLoginSplash] = useState(false);
@@ -147,8 +148,9 @@ export default function QAApp() {
 
   // 최초 앱 실행 스플래시 화면 타이머
   useEffect(() => {
-    const timer = setTimeout(() => setShowSplash(false), 2500); 
-    return () => clearTimeout(timer);
+    const fadeTimer = setTimeout(() => setIsSplashFading(true), 2000); // 2초 후 부드럽게 페이드아웃 시작
+    const hideTimer = setTimeout(() => setShowSplash(false), 2500); // 2.5초 후 완전히 언마운트
+    return () => { clearTimeout(fadeTimer); clearTimeout(hideTimer); };
   }, []);
 
   useEffect(() => { 
@@ -210,6 +212,12 @@ export default function QAApp() {
   const globalStyles = `
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
     
+    /* 공통 시네마틱 로딩 애니메이션 정의 */
+    @keyframes loading-bar { 0% { width: 0%; transform: translateX(-10%); } 50% { width: 80%; transform: translateX(0); } 100% { width: 100%; transform: translateX(0); } }
+    @keyframes fade-in-zoom { 0% { opacity: 0; transform: scale(0.95); } 100% { opacity: 1; transform: scale(1); } }
+    .animate-loading-bar { animation: loading-bar 2s ease-in-out forwards; }
+    .animate-fade-in-zoom { animation: fade-in-zoom 1s ease-out forwards; }
+
     /* 텍스트 드래그(선택) 및 입력 커서에 프리미엄 효과 부여 */
     ::selection {
       background: rgba(39, 39, 42, 0.2);
@@ -506,7 +514,7 @@ export default function QAApp() {
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
            <div className="w-[100vw] h-[100vw] max-w-[800px] max-h-[800px] bg-zinc-600/10 rounded-full blur-[140px] animate-pulse"></div>
         </div>
-        <div className="z-10 flex flex-col items-center animate-in fade-in zoom-in duration-1000 scale-105">
+        <div className="z-10 flex flex-col items-center animate-fade-in-zoom scale-105">
           <div className="w-40 h-40 mb-10 flex items-center justify-center relative">
              {/* Spinning glowing border */}
              <div className="absolute inset-0 bg-white/5 rounded-full backdrop-blur-3xl border border-white/10 shadow-[0_0_60px_rgba(255,255,255,0.05)] animate-[spin_4s_linear_infinite]"></div>
@@ -515,12 +523,9 @@ export default function QAApp() {
           <h1 className="text-4xl font-black text-white tracking-widest uppercase mb-5 shadow-black drop-shadow-2xl">Caseai</h1>
           <p className="text-zinc-500 text-[10px] font-black tracking-[0.4em] uppercase animate-pulse">Initializing Workspace...</p>
           <div className="mt-10 w-56 h-0.5 bg-zinc-800 rounded-full overflow-hidden relative">
-            <div className="absolute top-0 left-0 h-full bg-zinc-300 rounded-full animate-[loading_2.5s_ease-in-out_forwards] shadow-[0_0_15px_rgba(255,255,255,0.6)]"></div>
+            <div className="absolute top-0 left-0 h-full bg-zinc-300 rounded-full animate-loading-bar shadow-[0_0_15px_rgba(255,255,255,0.6)]"></div>
           </div>
         </div>
-        <style>{`
-          @keyframes loading { 0% { width: 0%; transform: translateX(-10%); } 50% { width: 80%; transform: translateX(0); } 100% { width: 100%; transform: translateX(0); } }
-        `}</style>
       </div>
     );
   }
@@ -528,18 +533,18 @@ export default function QAApp() {
   // 기존 초기 스플래시 화면
   if (showSplash) {
     return (
-      <div className="h-screen w-screen bg-[#f4f4f5] flex flex-col items-center justify-center relative overflow-hidden font-sans">
+      <div className={`h-screen w-screen bg-[#f4f4f5] flex flex-col items-center justify-center relative overflow-hidden font-sans transition-opacity duration-500 ease-in-out ${isSplashFading ? 'opacity-0' : 'opacity-100'}`}>
         <style>{globalStyles}</style>
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-zinc-300/30 blur-[120px] animate-pulse"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-zinc-400/20 blur-[120px] animate-pulse" style={{ animationDelay: '1s' }}></div>
         
-        <div className="z-10 flex flex-col items-center animate-in fade-in zoom-in duration-1000">
+        <div className="z-10 flex flex-col items-center animate-fade-in-zoom">
           <div className="w-36 h-36 mb-6 flex items-center justify-center overflow-visible">
              <img src="/icon-192x192.png" alt="Caseai App Icon" className="w-full h-full object-contain drop-shadow-2xl" onError={(e) => { e.target.onerror = null; e.target.outerHTML = "<div class='w-full h-full rounded-2xl bg-gradient-to-br from-zinc-700 to-zinc-900 flex items-center justify-center shadow-2xl'><svg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/></svg></div>"; }} />
           </div>
           <h1 className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-zinc-900 to-zinc-600 tracking-tight">Caseai</h1>
           <div className="mt-8 w-32 h-1 bg-zinc-200 rounded-full overflow-hidden">
-            <div className="h-full bg-zinc-800 rounded-full animate-[loading_2s_ease-in-out_forwards]"></div>
+            <div className="h-full bg-zinc-800 rounded-full animate-loading-bar"></div>
           </div>
         </div>
       </div>
