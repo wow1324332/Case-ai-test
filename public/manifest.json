@@ -1,0 +1,21 @@
+{
+"name": "QA Nexus",
+"short_name": "QA Nexus",
+"description": "Cinematic Test Management Tool",
+"start_url": "/",
+"display": "standalone",
+"background_color": "#f4f4f5",
+"theme_color": "#f4f4f5",
+"icons": [
+{
+"src": "/icon-192x192.png",
+"sizes": "192x192",
+"type": "image/png"
+},
+{
+"src": "/icon-512x512.png",
+"sizes": "512x512",
+"type": "image/png"
+}
+]
+}
