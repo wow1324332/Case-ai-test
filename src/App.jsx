@@ -116,7 +116,9 @@ export default function QAApp() {
 
   // 요청사항 2: 로그인 탭 상태 및 관리자 승인 상태
   const [loginTab, setLoginTab] = useState('login'); // 'login' or 'register'
-  const [isApproved, setIsApproved] = useState(false);
+  const [pendingUsers, setPendingUsers] = useState([]);
+  const [approvedUsers, setApprovedUsers] = useState([]);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
 
@@ -197,37 +199,57 @@ export default function QAApp() {
 
   const globalStyles = `
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+    @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap');
     .font-sans {
-      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif !important;
-    }
+    /* 선택/활성화 탭의 좌측 보더 등 세부 디자인 유지 */
+    .border-l-blue-600 { border-left-color: rgba(63, 63, 70, 0.9) !important; }
   `;
 
   // 요청사항 2: 로그인 및 관리자 승인 로직
   const handleAdminAuth = (e) => {
     e.preventDefault();
     if (adminPassword === 'djslzja1324!') {
-      setIsApproved(true);
-      setShowAdminModal(false);
+      setIsAdminAuthenticated(true);
       setAdminPassword('');
-      setToastMessage('시스템 접속이 승인되었습니다.');
+      setToastMessage('관리자 인증이 완료되었습니다.');
     } else {
       setToastMessage('비밀번호가 일치하지 않습니다.');
     }
   };
 
+  const handleApproveUser = (user) => {
+    setApprovedUsers(prev => [...prev, user]);
+    setPendingUsers(prev => prev.filter(u => u.id !== user.id));
+    setToastMessage(`${user.name} 계정이 승인되었습니다.`);
+  };
+
   const handleLoginSubmit = (e) => {
     e.preventDefault();
-    if (!isApproved) {
-      setToastMessage('관리자 승인이 필요합니다. 우측 상단 설정 아이콘을 눌러 승인해주세요.');
+    const id = e.target.id.value;
+    const password = e.target.password.value;
+
+    if (loginTab === 'register') {
+      const name = e.target.name.value;
+      setPendingUsers(prev => [...prev, { id, name, password }]);
+      setToastMessage('관리자에게 승인 요청이 전송되었습니다.');
+      setLoginTab('login');
+      e.target.reset();
       return;
     }
-    
-    const id = e.target.id.value;
-    const name = loginTab === 'register' ? e.target.name.value : 'QA Tester';
-    
-    setUser({ name: name, email: id }); // 이메일 대신 ID를 표시명으로 활용
-    setData(INITIAL_DATA); 
-    setCurrentView('dashboard');
+
+    const user = approvedUsers.find(u => u.id === id && u.password === password);
+    if (user) {
+      setUser({ name: user.name, email: user.id });
+      setData(INITIAL_DATA); 
+      setCurrentView('dashboard');
+    } else {
+      const isPending = pendingUsers.some(u => u.id === id && u.password === password);
+      if (isPending) {
+        setToastMessage('관리자 승인 대기 중입니다.');
+      } else {
+        setToastMessage('가입 정보가 없거나 비밀번호가 일치하지 않습니다.');
+      }
+    }
   };
 
   const handleInstallApp = async () => {
@@ -360,6 +382,11 @@ export default function QAApp() {
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-zinc-300/30 blur-[120px] animate-pulse"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-zinc-400/20 blur-[120px] animate-pulse" style={{ animationDelay: '2s' }}></div>
         
+        {/* 4. 설정 버튼 - 배경 제거 및 호버 시 회전 애니메이션 적용 */}
+        <button onClick={() => setShowAdminModal(true)} className="fixed top-8 right-8 z-50 p-2.5 text-zinc-400 hover:text-zinc-800 transition-colors group">
+          <Settings size={22} className="group-hover:rotate-180 transition-transform duration-1000 ease-in-out" />
+        </button>
+
         <div className="w-full max-w-md p-10 bg-white/80 backdrop-blur-2xl rounded-[2rem] border border-white shadow-[0_8px_40px_rgba(0,0,0,0.08)] relative z-10 transition-all">
           {/* 앱 설치 버튼 (PWA) */}
           {deferredPrompt && (
@@ -368,17 +395,13 @@ export default function QAApp() {
             </button>
           )}
 
-          {/* 설정 버튼 */}
-          <button onClick={() => setShowAdminModal(true)} className="absolute top-6 right-6 p-2 text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100 rounded-full transition-all">
-            <Settings size={18} />
-          </button>
-
           <div className="flex flex-col items-center mb-6">
             <div className="w-20 h-20 rounded-3xl bg-white flex items-center justify-center mb-4 shadow-[0_8px_20px_rgba(24,24,27,0.08)] border border-zinc-200/50 p-3">
               <img src="/icon-192x192.png" alt="Caseai App Icon" className="w-full h-full object-contain" onError={(e) => { e.target.onerror = null; e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3Cpath d='M12 8v4'/%3E%3Cpath d='M12 16h.01'/%3E%3C/svg%3E"; }} />
             </div>
             <h1 className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-zinc-900 to-zinc-700 tracking-tight text-center">Caseai</h1>
-            <p className="text-zinc-500 mt-1.5 text-xs font-medium text-center">프리미엄 엔터프라이즈 테스트 플랫폼</p>
+            {/* 1. 영문 변경 및 고급스러운 필기체 폰트 적용 */}
+            <p className="text-zinc-500 mt-1 text-[15px] font-['Dancing_Script',_cursive] tracking-wide text-center">Premium Enterprise Test Platform</p>
           </div>
 
           {/* 탭 네비게이션 */}
@@ -387,41 +410,75 @@ export default function QAApp() {
             <button type="button" onClick={() => setLoginTab('register')} className={`flex-1 pb-3 text-sm font-bold transition-all border-b-2 ${loginTab === 'register' ? 'text-zinc-900 border-zinc-800' : 'text-zinc-400 border-transparent hover:text-zinc-600'}`}>계정 생성</button>
           </div>
 
-          <form onSubmit={handleLoginSubmit} className="space-y-4">
-            {loginTab === 'register' && (
+          <form onSubmit={handleLoginSubmit} className="space-y-0">
+            {/* 5. 높이 고정(h-[250px])으로 탭 전환 시 모달 크기 변동 완벽 차단 */}
+            <div className="h-[250px] flex flex-col gap-4">
+              {loginTab === 'register' && (
+                <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                  <label className="block text-[11px] font-bold text-zinc-500 mb-1.5 ml-1 uppercase tracking-wider">Name</label>
+                  {/* 2. 번쩍임 완전 제거(outline-none, ring-0), 커서 색상 강제 지정(caretColor) */}
+                  <input name="name" type="text" required autoComplete="off" className="w-full bg-white/60 backdrop-blur-sm border border-zinc-200/80 rounded-xl text-sm px-4 py-3 text-zinc-900 outline-none focus:outline-none focus:ring-0 focus:border-zinc-400 transition-colors duration-500 ease-in-out shadow-inner placeholder-zinc-400" style={{ caretColor: '#27272a' }} placeholder="이름 입력" />
+                </div>
+              )}
               <div>
-                <label className="block text-[11px] font-bold text-zinc-500 mb-1.5 ml-1 uppercase tracking-wider">Name</label>
-                <input name="name" type="text" required className="w-full bg-white/60 backdrop-blur-sm border border-zinc-200/80 rounded-xl text-sm px-4 py-3 text-zinc-900 focus:outline-none focus:border-zinc-500/50 focus:ring-4 focus:ring-zinc-500/10 transition-all placeholder-zinc-400 shadow-inner" placeholder="이름 입력" />
+                <label className="block text-[11px] font-bold text-zinc-500 mb-1.5 ml-1 uppercase tracking-wider">ID</label>
+                <input name="id" type="text" required autoComplete="off" className="w-full bg-white/60 backdrop-blur-sm border border-zinc-200/80 rounded-xl text-sm px-4 py-3 text-zinc-900 outline-none focus:outline-none focus:ring-0 focus:border-zinc-400 transition-colors duration-500 ease-in-out shadow-inner placeholder-zinc-400" style={{ caretColor: '#27272a' }} placeholder="아이디 입력" />
               </div>
-            )}
-            <div>
-              <label className="block text-[11px] font-bold text-zinc-500 mb-1.5 ml-1 uppercase tracking-wider">ID</label>
-              <input name="id" type="text" required className="w-full bg-white/60 backdrop-blur-sm border border-zinc-200/80 rounded-xl text-sm px-4 py-3 text-zinc-900 focus:outline-none focus:border-zinc-500/50 focus:ring-4 focus:ring-zinc-500/10 transition-all placeholder-zinc-400 shadow-inner" placeholder="아이디 입력" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold text-zinc-500 mb-1.5 ml-1 uppercase tracking-wider">Password</label>
-              <input name="password" type="password" required className="w-full bg-white/60 backdrop-blur-sm border border-zinc-200/80 rounded-xl text-sm px-4 py-3 text-zinc-900 focus:outline-none focus:border-zinc-500/50 focus:ring-4 focus:ring-zinc-500/10 transition-all placeholder-zinc-400 shadow-inner" placeholder="비밀번호 입력" />
+              <div>
+                <label className="block text-[11px] font-bold text-zinc-500 mb-1.5 ml-1 uppercase tracking-wider">Password</label>
+                <input name="password" type="password" required className="w-full bg-white/60 backdrop-blur-sm border border-zinc-200/80 rounded-xl text-sm px-4 py-3 text-zinc-900 outline-none focus:outline-none focus:ring-0 focus:border-zinc-400 transition-colors duration-500 ease-in-out shadow-inner placeholder-zinc-400" style={{ caretColor: '#27272a' }} placeholder="비밀번호 입력" />
+              </div>
             </div>
             
-            <button type="submit" className="w-full bg-gradient-to-b from-zinc-700 to-zinc-900 hover:from-zinc-800 hover:to-black text-white text-sm font-bold py-3.5 rounded-xl transition-all shadow-[0_4px_14px_0_rgba(24,24,27,0.39)] hover:shadow-[0_6px_20px_rgba(24,24,27,0.23)] border border-zinc-700/50 mt-6">
-              {loginTab === 'login' ? '시스템 접속' : '계정 생성 및 접속'}
-            </button>
+            {/* 5. mt-4 적용으로 패스워드 입력칸과 명확한 간격 분리 */}
+            <div className="mt-4">
+              <button type="submit" className="w-full bg-gradient-to-b from-zinc-700 to-zinc-900 hover:from-zinc-800 hover:to-black text-white text-sm font-bold py-3.5 rounded-xl transition-all shadow-[0_4px_14px_0_rgba(24,24,27,0.39)] hover:shadow-[0_6px_20px_rgba(24,24,27,0.23)] border border-zinc-700/50">
+                {/* 3. "Log In"을 직관적인 "로그인"으로 변경 */}
+                {loginTab === 'login' ? '로그인' : '계정 생성 요청'}
+              </button>
+            </div>
           </form>
 
           {/* 승인 모달 */}
           {showAdminModal && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md">
               <div className="bg-white/90 backdrop-blur-2xl p-6 rounded-2xl w-80 shadow-[0_20px_60px_rgba(0,0,0,0.2)] border border-white transform animate-in fade-in zoom-in-95 duration-200">
-                <h3 className="text-sm font-black text-zinc-800 mb-4 flex items-center gap-2">
-                  <Settings size={16}/> 관리자 시스템 승인
-                </h3>
-                <form onSubmit={handleAdminAuth}>
-                  <input type="password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} required placeholder="승인 비밀번호 입력" className="w-full bg-zinc-50/50 border border-zinc-200/80 rounded-xl text-sm px-4 py-3 text-zinc-900 focus:outline-none focus:border-zinc-500/50 focus:ring-4 focus:ring-zinc-500/10 transition-all shadow-inner mb-4" />
-                  <div className="flex justify-end gap-2">
-                    <button type="button" onClick={() => setShowAdminModal(false)} className="px-4 py-2 text-xs font-bold text-zinc-500 hover:bg-zinc-100 rounded-lg transition-all">취소</button>
-                    <button type="submit" className="px-4 py-2 bg-zinc-800 text-white rounded-lg text-xs font-bold shadow-md hover:bg-black transition-all">승인 확인</button>
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-sm font-black text-zinc-800 flex items-center gap-2">
+                    <Settings size={16}/> {isAdminAuthenticated ? '가입 대기열 관리' : '관리자 시스템 승인'}
+                  </h3>
+                </div>
+                
+                {!isAdminAuthenticated ? (
+                  <form onSubmit={handleAdminAuth}>
+                    <input type="password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} required placeholder="승인 비밀번호 입력" className="w-full bg-zinc-50/50 border border-zinc-200/80 rounded-xl text-sm px-4 py-3 text-zinc-900 focus:outline-none focus:border-zinc-400 focus:ring-[3px] focus:ring-zinc-200/50 transition-all duration-300 ease-out caret-zinc-800 shadow-inner mb-4" />
+                    <div className="flex justify-end gap-2">
+                      <button type="button" onClick={() => setShowAdminModal(false)} className="px-4 py-2 text-xs font-bold text-zinc-500 hover:bg-zinc-100 rounded-lg transition-all">취소</button>
+                      <button type="submit" className="px-4 py-2 bg-zinc-800 text-white rounded-lg text-xs font-bold shadow-md hover:bg-black transition-all">인증 확인</button>
+                    </div>
+                  </form>
+                ) : (
+                  <div>
+                    <div className="max-h-48 overflow-y-auto custom-scrollbar space-y-2 mb-4">
+                      {pendingUsers.length === 0 ? (
+                        <p className="text-xs text-zinc-400 text-center py-6 font-bold">승인 대기 중인 요청이 없습니다.</p>
+                      ) : (
+                        pendingUsers.map(u => (
+                          <div key={u.id} className="flex justify-between items-center p-3 bg-white border border-zinc-200/80 rounded-xl shadow-sm">
+                            <div>
+                              <p className="text-xs font-black text-zinc-800">{u.name}</p>
+                              <p className="text-[10px] font-bold text-zinc-500">{u.id}</p>
+                            </div>
+                            <button onClick={() => handleApproveUser(u)} className="px-3 py-1.5 bg-emerald-500 text-white text-[10px] font-bold rounded-lg shadow-sm hover:bg-emerald-600 transition-all">승인</button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <div className="flex justify-end">
+                      <button type="button" onClick={() => {setShowAdminModal(false); setIsAdminAuthenticated(false);}} className="px-4 py-2 text-xs font-bold text-zinc-500 hover:bg-zinc-100 rounded-lg transition-all w-full border border-zinc-200/80">닫기</button>
+                    </div>
                   </div>
-                </form>
+                )}
               </div>
             </div>
           )}
