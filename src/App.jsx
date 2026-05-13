@@ -6,7 +6,7 @@ import {
 import { 
   Play, CheckCircle, XCircle, AlertTriangle, ShieldAlert, FolderPlus, 
   FileSpreadsheet, UploadCloud, ChevronRight, LayoutDashboard, Folder, 
-  Activity, Settings, LogOut, Plus, Search, Filter, PlayCircle, Info, ChevronDown, Download
+  Activity, Settings, LogOut, Plus, Search, Filter, PlayCircle, Info, ChevronDown, Download, Camera
 } from 'lucide-react';
 
 const getEnv = (key) => {
@@ -113,8 +113,19 @@ export default function QAApp() {
 
   // 시네마틱 스플래시 로딩 화면 상태
   const [showSplash, setShowSplash] = useState(true);
+  
+  // 요청사항 1: 로그인 성공 후 시네마틱 스플래시 상태
+  const [isLoginSplash, setIsLoginSplash] = useState(false);
 
-  // 요청사항 2: 로그인 탭 상태 및 관리자 승인 상태
+  // 프로필 설정 모달 상태
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [profileAvatarPreview, setProfileAvatarPreview] = useState(null);
+  const avatarInputRef = useRef(null);
+  
+  // 로그아웃 모달 상태
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+
+  // 로그인 탭 상태 및 관리자 승인 상태
   const [loginTab, setLoginTab] = useState('login'); // 'login' or 'register'
   const [pendingUsers, setPendingUsers] = useState([]);
   const [approvedUsers, setApprovedUsers] = useState([]);
@@ -122,7 +133,7 @@ export default function QAApp() {
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
 
-  // 요청사항 3: 테스트 런 생성 시 스위트 접기 상태 배열
+  // 테스트 런 생성 시 스위트 접기 상태 배열
   const [collapsedSuites, setCollapsedSuites] = useState([]);
 
   const [data, setData] = useState({
@@ -134,9 +145,9 @@ export default function QAApp() {
 
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // 스플래시 화면 타이머
+  // 최초 앱 실행 스플래시 화면 타이머
   useEffect(() => {
-    const timer = setTimeout(() => setShowSplash(false), 2500); // 2.5초 후 로딩 종료
+    const timer = setTimeout(() => setShowSplash(false), 2500); 
     return () => clearTimeout(timer);
   }, []);
 
@@ -183,7 +194,6 @@ export default function QAApp() {
       const projSuites = data.suites.filter(s => s.projectId === activeProjectId);
       const allCases = data.cases.filter(c => projSuites.some(s => s.id === c.suiteId));
       setSelectedRunCases(allCases.map(c => c.id));
-      // 모든 스위트를 기본적으로 펼침 상태로 둠 (collapsedSuites 배열 비움)
       setCollapsedSuites([]);
     }
   }, [currentView, activeRunId, selectedCaseId, activeProjectId, data.runs, data.cases, data.suites]);
@@ -205,7 +215,7 @@ export default function QAApp() {
       background: rgba(39, 39, 42, 0.2);
       color: #18181b;
     }
-    input {
+    input, textarea {
       caret-color: #18181b !important;
     }
 
@@ -213,11 +223,41 @@ export default function QAApp() {
       font-family: 'Pretendard', sans-serif !important;
     }
     
-    /* 선택/활성화 탭의 좌측 보더 등 세부 디자인 유지 */
+    /* 고급스러운 시네마틱 그레이톤(Zinc/Silver) 오버라이드 */
+    .bg-blue-50 { background-color: rgba(244, 244, 245, 0.4) !important; }
+    .bg-blue-100 { background-color: rgba(228, 228, 231, 0.5) !important; }
+    .bg-blue-600 { background-color: rgba(63, 63, 70, 0.9) !important; }
+    .hover\\:bg-blue-700:hover { background-color: rgba(39, 39, 42, 1) !important; }
+    .hover\\:bg-blue-50:hover { background-color: rgba(244, 244, 245, 0.6) !important; }
+    .hover\\:bg-blue-50\\/50:hover { background-color: rgba(244, 244, 245, 0.4) !important; }
+    .hover\\:bg-blue-50\\/30:hover { background-color: rgba(244, 244, 245, 0.2) !important; }
+    
+    .text-blue-400 { color: #a1a1aa !important; }
+    .text-blue-500 { color: #71717a !important; }
+    .text-blue-600 { color: #52525b !important; }
+    .text-blue-700 { color: #3f3f46 !important; }
+    .text-blue-800 { color: #27272a !important; }
+    .text-blue-900 { color: #18181b !important; }
+    .group-hover\\:text-blue-700:hover { color: #3f3f46 !important; }
+    .hover\\:text-blue-600:hover { color: #52525b !important; }
+    
+    .border-blue-100 { border-color: rgba(228, 228, 231, 0.5) !important; }
+    .border-blue-200 { border-color: rgba(212, 212, 216, 0.6) !important; }
+    .border-blue-300 { border-color: rgba(161, 161, 170, 0.7) !important; }
+    .border-blue-400 { border-color: rgba(113, 113, 122, 0.6) !important; }
+    .border-blue-500 { border-color: rgba(82, 82, 91, 0.8) !important; }
+    .hover\\:border-blue-300:hover { border-color: rgba(161, 161, 170, 0.8) !important; }
+    .hover\\:border-blue-400:hover { border-color: rgba(113, 113, 122, 0.8) !important; }
+    .focus\\:border-blue-500:focus { border-color: rgba(82, 82, 91, 1) !important; }
+    
+    .ring-blue-500, .focus\\:ring-blue-500:focus { --tw-ring-color: rgba(82, 82, 91, 0.5) !important; }
+    
+    .text-indigo-600 { color: #52525b !important; }
+    .bg-indigo-50 { background-color: rgba(244, 244, 245, 0.5) !important; }
+
     .border-l-blue-600 { border-left-color: rgba(63, 63, 70, 0.9) !important; }
   `;
 
-  // 요청사항 2: 로그인 및 관리자 승인 로직
   const handleAdminAuth = (e) => {
     e.preventDefault();
     if (adminPassword === 'djslzja1324!') {
@@ -249,11 +289,18 @@ export default function QAApp() {
       return;
     }
 
-    const user = approvedUsers.find(u => u.id === id && u.password === password);
-    if (user) {
-      setUser({ name: user.name, email: user.id });
+    const authUser = approvedUsers.find(u => u.id === id && u.password === password);
+    if (authUser) {
+      setUser({ name: authUser.name, email: authUser.id, nickname: 'Tester' });
       setData(INITIAL_DATA); 
-      setCurrentView('dashboard');
+      
+      // 로그인 성공 시 시네마틱 스플래시 발생
+      setIsLoginSplash(true);
+      setTimeout(() => {
+        setIsLoginSplash(false);
+        setCurrentView('dashboard');
+      }, 3000);
+
     } else {
       const isPending = pendingUsers.some(u => u.id === id && u.password === password);
       if (isPending) {
@@ -274,17 +321,37 @@ export default function QAApp() {
     }
   };
 
+  const handleAvatarChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (evt) => setProfileAvatarPreview(evt.target.result);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleProfileUpdate = (e) => {
+    e.preventDefault();
+    const newName = e.target.profileName.value;
+    const newNickname = e.target.profileNickname.value;
+    setUser(prev => ({...prev, name: newName, nickname: newNickname, avatar: profileAvatarPreview}));
+    setIsProfileModalOpen(false);
+    setToastMessage('개인정보가 성공적으로 업데이트되었습니다.');
+  };
+
   const Layout = ({ children, title }) => (
     <div className="flex h-screen bg-[#f4f4f5] bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-zinc-200/50 via-[#f4f4f5] to-zinc-100 text-zinc-800 font-sans overflow-hidden selection:bg-zinc-200">
       <style>{globalStyles}</style>
       
       <aside className="w-60 bg-white/70 backdrop-blur-2xl border-r border-zinc-200/60 flex flex-col z-20 shadow-[4px_0_24px_rgb(0,0,0,0.03)]">
-        <div className="h-14 flex items-center gap-2.5 px-5 border-b border-zinc-200/60">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-zinc-700 to-zinc-900 flex items-center justify-center shadow-[0_2px_10px_rgba(24,24,27,0.3)]">
-            <ShieldAlert size={16} className="text-white" />
+        <div className="h-14 flex items-center gap-3 px-5 border-b border-zinc-200/60">
+          <div className="w-7 h-7 flex items-center justify-center">
+            {/* 요청사항 2: 사이드바 아이콘을 앱 로고로 변경 */}
+            <img src="/icon-192x192.png" className="w-full h-full object-contain drop-shadow-md" alt="Caseai Logo" onError={(e) => { e.target.onerror = null; e.target.outerHTML = "<div class='w-full h-full rounded-lg bg-gradient-to-br from-zinc-700 to-zinc-900 flex items-center justify-center shadow-md'><svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/></svg></div>"; }} />
           </div>
-          <h1 className="text-[15px] font-bold bg-clip-text text-transparent bg-gradient-to-r from-zinc-900 to-zinc-600 tracking-tight">
-            QA NEXUS
+          {/* 요청사항 2: 사이드바 타이틀 변경 */}
+          <h1 className="text-[16px] font-black bg-clip-text text-transparent bg-gradient-to-r from-zinc-900 to-zinc-600 tracking-tight">
+            Caseai
           </h1>
         </div>
         
@@ -309,15 +376,26 @@ export default function QAApp() {
         </nav>
 
         <div className="p-4 border-t border-zinc-200/60 bg-white/50 backdrop-blur-md">
-          <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/80 transition-colors border border-transparent hover:border-white hover:shadow-sm">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-zinc-200 to-zinc-50 flex items-center justify-center text-xs font-bold text-zinc-800 shadow-inner border border-white">
-              {user?.name.charAt(0)}
+          <div className="flex items-center gap-2 px-2 py-2 rounded-xl border border-transparent transition-all hover:bg-white/80 hover:shadow-sm hover:border-white group">
+            {/* 요청사항 4: 개인 프로필 사진/정보 영역 클릭 가능하게 분리 */}
+            <div 
+               onClick={() => {
+                 setProfileAvatarPreview(user?.avatar || null);
+                 setIsProfileModalOpen(true);
+               }}
+               className="flex flex-1 items-center gap-3 cursor-pointer p-1 rounded-lg transition-colors min-w-0"
+               title="프로필 설정 열기"
+            >
+              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-zinc-200 to-zinc-50 flex shrink-0 items-center justify-center text-xs font-bold text-zinc-800 shadow-inner border border-white overflow-hidden">
+                {user?.avatar ? <img src={user.avatar} alt="Profile" className="w-full h-full object-cover" /> : user?.name.charAt(0)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-zinc-800 truncate group-hover:text-zinc-900 transition-colors">{user?.name}</p>
+                <p className="text-[10px] text-zinc-500 truncate">{user?.nickname}</p>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold text-zinc-800 truncate">{user?.name}</p>
-              <p className="text-[10px] text-zinc-500 truncate">ID: {user?.email}</p>
-            </div>
-            <button onClick={() => {setUser(null); setCurrentView('login');}} className="text-zinc-400 hover:text-rose-500 transition-colors p-1.5 rounded-lg hover:bg-rose-50">
+            
+            <button onClick={() => setIsLogoutModalOpen(true)} className="text-zinc-400 hover:text-rose-500 transition-colors p-2 rounded-lg hover:bg-rose-50 shrink-0" title="로그아웃">
               <LogOut size={16} />
             </button>
           </div>
@@ -334,6 +412,65 @@ export default function QAApp() {
           </div>
         </div>
       </main>
+
+      {/* Profile Modal */}
+      {isProfileModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm">
+          <div className="bg-white/90 backdrop-blur-2xl p-8 rounded-3xl w-[360px] shadow-[0_20px_60px_rgba(0,0,0,0.2)] border border-white transform animate-in fade-in zoom-in-95 duration-300">
+            <h3 className="text-[15px] font-black text-zinc-800 mb-6 flex items-center gap-2 tracking-tight">
+              개인 프로필 설정
+            </h3>
+            <form onSubmit={handleProfileUpdate}>
+              <div className="flex flex-col items-center mb-6">
+                 <input type="file" accept="image/*" ref={avatarInputRef} className="hidden" onChange={handleAvatarChange} />
+                 <div onClick={() => avatarInputRef.current?.click()} className="w-20 h-20 rounded-full bg-gradient-to-tr from-zinc-200 to-zinc-50 flex items-center justify-center text-2xl font-black text-zinc-800 shadow-inner border-[3px] border-white relative group cursor-pointer overflow-hidden">
+                    {profileAvatarPreview ? (
+                        <img src={profileAvatarPreview} alt="Preview" className="w-full h-full object-cover" />
+                    ) : (
+                        user?.name.charAt(0)
+                    )}
+                    <div className="absolute inset-0 bg-zinc-900/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[2px]">
+                       <Camera size={20} className="text-white"/>
+                    </div>
+                 </div>
+                 <p className="text-[10px] font-bold text-zinc-400 mt-2 tracking-wider">사진 변경</p>
+              </div>
+              
+              <div className="space-y-4 mb-8">
+                <div>
+                  <label className="block text-[10px] font-black text-zinc-400 mb-1.5 ml-1 uppercase tracking-wider">이름 (Name)</label>
+                  <input name="profileName" type="text" defaultValue={user?.name || ''} required className="w-full bg-white/60 backdrop-blur-sm border-2 border-zinc-200/60 rounded-xl text-sm px-4 py-3 text-zinc-900 font-bold outline-none focus:border-zinc-500 focus:ring-[4px] focus:ring-zinc-500/10 focus:shadow-lg transition-all duration-300 ease-out shadow-inner caret-zinc-900" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-zinc-400 mb-1.5 ml-1 uppercase tracking-wider">별명 (Nickname)</label>
+                  <input name="profileNickname" type="text" defaultValue={user?.nickname || ''} className="w-full bg-white/60 backdrop-blur-sm border-2 border-zinc-200/60 rounded-xl text-sm px-4 py-3 text-zinc-900 font-bold outline-none focus:border-zinc-500 focus:ring-[4px] focus:ring-zinc-500/10 focus:shadow-lg transition-all duration-300 ease-out shadow-inner caret-zinc-900" placeholder="예: QA 마스터" />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2.5">
+                <button type="button" onClick={() => setIsProfileModalOpen(false)} className="px-5 py-3 text-xs font-bold text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 rounded-xl transition-all">취소</button>
+                <button type="submit" className="px-6 py-3 bg-gradient-to-b from-zinc-700 to-zinc-900 text-white rounded-xl text-xs font-bold shadow-[0_4px_14px_0_rgba(24,24,27,0.39)] hover:shadow-[0_6px_20px_rgba(24,24,27,0.23)] transition-all">설정 저장</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Logout Confirmation Modal */}
+      {isLogoutModalOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm">
+          <div className="bg-white/90 backdrop-blur-2xl p-6 rounded-3xl w-80 shadow-[0_20px_60px_rgba(0,0,0,0.2)] border border-white transform animate-in fade-in zoom-in-95 duration-300">
+            <h3 className="text-[15px] font-black text-zinc-800 mb-2 flex items-center gap-2 tracking-tight">
+               로그아웃
+            </h3>
+            <p className="text-[12px] font-medium text-zinc-500 mb-6">정말 로그아웃 하시겠습니까?</p>
+            <div className="flex justify-end gap-2.5">
+              <button type="button" onClick={() => setIsLogoutModalOpen(false)} className="px-5 py-2.5 text-xs font-bold text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 rounded-xl transition-all">취소</button>
+              <button type="button" onClick={() => { setUser(null); setCurrentView('login'); setIsLogoutModalOpen(false); }} className="px-5 py-2.5 bg-gradient-to-b from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white rounded-xl text-xs font-bold shadow-[0_4px_14px_0_rgba(244,63,94,0.39)] transition-all">로그아웃</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {toastMessage && (
         <div className="fixed bottom-8 right-8 z-50 bg-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 text-white px-5 py-3.5 rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.3)] flex items-center gap-3 animate-in fade-in slide-in-from-bottom-8 duration-300">
@@ -360,6 +497,35 @@ export default function QAApp() {
     </button>
   );
 
+  // 요청사항 1: 로그인 직후 발생하는 강력한 시네마틱 스플래시 화면
+  if (isLoginSplash) {
+    return (
+      <div className="h-screen w-screen bg-zinc-950 flex flex-col items-center justify-center relative overflow-hidden font-sans">
+        <style>{globalStyles}</style>
+        {/* Cinematic light sweeps */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+           <div className="w-[100vw] h-[100vw] max-w-[800px] max-h-[800px] bg-zinc-600/10 rounded-full blur-[140px] animate-pulse"></div>
+        </div>
+        <div className="z-10 flex flex-col items-center animate-in fade-in zoom-in duration-1000 scale-105">
+          <div className="w-40 h-40 mb-10 flex items-center justify-center relative">
+             {/* Spinning glowing border */}
+             <div className="absolute inset-0 bg-white/5 rounded-full backdrop-blur-3xl border border-white/10 shadow-[0_0_60px_rgba(255,255,255,0.05)] animate-[spin_4s_linear_infinite]"></div>
+             <img src="/icon-192x192.png" className="w-24 h-24 object-contain drop-shadow-[0_0_25px_rgba(255,255,255,0.2)] relative z-10" alt="Caseai Icon" onError={(e) => { e.target.onerror = null; e.target.outerHTML = "<div class='w-24 h-24 rounded-2xl flex items-center justify-center'><svg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/></svg></div>"; }}/>
+          </div>
+          <h1 className="text-4xl font-black text-white tracking-widest uppercase mb-5 shadow-black drop-shadow-2xl">Caseai</h1>
+          <p className="text-zinc-500 text-[10px] font-black tracking-[0.4em] uppercase animate-pulse">Initializing Workspace...</p>
+          <div className="mt-10 w-56 h-0.5 bg-zinc-800 rounded-full overflow-hidden relative">
+            <div className="absolute top-0 left-0 h-full bg-zinc-300 rounded-full animate-[loading_2.5s_ease-in-out_forwards] shadow-[0_0_15px_rgba(255,255,255,0.6)]"></div>
+          </div>
+        </div>
+        <style>{`
+          @keyframes loading { 0% { width: 0%; transform: translateX(-10%); } 50% { width: 80%; transform: translateX(0); } 100% { width: 100%; transform: translateX(0); } }
+        `}</style>
+      </div>
+    );
+  }
+
+  // 기존 초기 스플래시 화면
   if (showSplash) {
     return (
       <div className="h-screen w-screen bg-[#f4f4f5] flex flex-col items-center justify-center relative overflow-hidden font-sans">
@@ -369,20 +535,13 @@ export default function QAApp() {
         
         <div className="z-10 flex flex-col items-center animate-in fade-in zoom-in duration-1000">
           <div className="w-36 h-36 mb-6 flex items-center justify-center overflow-visible">
-             <img src="/icon-192x192.png" alt="Caseai App Icon" className="w-full h-full object-contain drop-shadow-2xl" onError={(e) => { e.target.onerror = null; e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3Cpath d='M12 8v4'/%3E%3Cpath d='M12 16h.01'/%3E%3C/svg%3E"; }} />
+             <img src="/icon-192x192.png" alt="Caseai App Icon" className="w-full h-full object-contain drop-shadow-2xl" onError={(e) => { e.target.onerror = null; e.target.outerHTML = "<div class='w-full h-full rounded-2xl bg-gradient-to-br from-zinc-700 to-zinc-900 flex items-center justify-center shadow-2xl'><svg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/></svg></div>"; }} />
           </div>
           <h1 className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-zinc-900 to-zinc-600 tracking-tight">Caseai</h1>
           <div className="mt-8 w-32 h-1 bg-zinc-200 rounded-full overflow-hidden">
             <div className="h-full bg-zinc-800 rounded-full animate-[loading_2s_ease-in-out_forwards]"></div>
           </div>
         </div>
-        <style>{`
-          @keyframes loading {
-            0% { width: 0%; transform: translateX(-100%); }
-            50% { width: 70%; transform: translateX(0); }
-            100% { width: 100%; transform: translateX(0); }
-          }
-        `}</style>
       </div>
     );
   }
@@ -394,13 +553,11 @@ export default function QAApp() {
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-zinc-300/30 blur-[120px] animate-pulse"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-zinc-400/20 blur-[120px] animate-pulse" style={{ animationDelay: '2s' }}></div>
         
-        {/* 4. 설정 버튼 - 배경 제거 및 호버 시 회전 애니메이션 적용 */}
         <button onClick={() => setShowAdminModal(true)} className="fixed top-8 right-8 z-50 p-2.5 text-zinc-400 hover:text-zinc-800 transition-colors group">
           <Settings size={22} className="group-hover:rotate-180 transition-transform duration-1000 ease-in-out" />
         </button>
 
-        <div className="w-full max-w-md p-10 bg-white/80 backdrop-blur-2xl rounded-[2rem] border border-white shadow-[0_8px_40px_rgba(0,0,0,0.08)] relative z-10 transition-all">
-          {/* 앱 설치 버튼 (PWA) */}
+        <div className="w-full max-w-md p-10 bg-white/80 backdrop-blur-2xl rounded-[2rem] border border-white shadow-[0_12px_40px_rgba(0,0,0,0.08)] relative z-10 transition-all">
           {deferredPrompt && (
             <button onClick={handleInstallApp} className="absolute top-6 left-6 flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200 rounded-lg transition-all text-[11px] font-bold shadow-sm border border-zinc-200/80">
               <Download size={14} /> 앱 설치
@@ -408,84 +565,80 @@ export default function QAApp() {
           )}
 
           <div className="flex flex-col items-center mb-6">
-            <div className="w-20 h-20 rounded-3xl bg-white flex items-center justify-center mb-4 shadow-[0_8px_20px_rgba(24,24,27,0.08)] border border-zinc-200/50 p-3">
-              <img src="/icon-192x192.png" alt="Caseai App Icon" className="w-full h-full object-contain" onError={(e) => { e.target.onerror = null; e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3Cpath d='M12 8v4'/%3E%3Cpath d='M12 16h.01'/%3E%3C/svg%3E"; }} />
+            <div className="w-20 h-20 rounded-3xl bg-white flex items-center justify-center mb-4 shadow-[0_8px_20px_rgba(24,24,27,0.08)] border border-zinc-200/50 p-2.5">
+              <img src="/icon-192x192.png" alt="Caseai App Icon" className="w-full h-full object-contain" onError={(e) => { e.target.onerror = null; e.target.outerHTML = "<div class='w-full h-full rounded-2xl bg-gradient-to-br from-zinc-700 to-zinc-900 flex items-center justify-center shadow-inner'><svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/></svg></div>"; }} />
             </div>
             <h1 className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-zinc-900 to-zinc-700 tracking-tight text-center">Caseai</h1>
             <p className="text-zinc-400 mt-1.5 text-[9px] font-bold tracking-widest text-center uppercase">Premium Enterprise Test Platform</p>
           </div>
 
-          {/* 탭 네비게이션 */}
           <div className="flex border-b border-zinc-200/80 mb-6">
             <button type="button" onClick={() => setLoginTab('login')} className={`flex-1 pb-3 text-sm font-bold transition-all border-b-2 ${loginTab === 'login' ? 'text-zinc-900 border-zinc-800' : 'text-zinc-400 border-transparent hover:text-zinc-600'}`}>로그인</button>
             <button type="button" onClick={() => setLoginTab('register')} className={`flex-1 pb-3 text-sm font-bold transition-all border-b-2 ${loginTab === 'register' ? 'text-zinc-900 border-zinc-800' : 'text-zinc-400 border-transparent hover:text-zinc-600'}`}>계정 생성</button>
           </div>
 
           <form onSubmit={handleLoginSubmit} className="space-y-0">
-            {/* 탭 전환 시 모달 크기 고정 유지 및 폼 내부 간격 확장 */}
             <div className="h-[270px] flex flex-col gap-5">
               {loginTab === 'register' && (
                 <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                  <label className="block text-[11px] font-bold text-zinc-500 mb-1.5 ml-1 uppercase tracking-wider">Name</label>
-                  <input name="name" type="text" required autoComplete="off" className="w-full bg-white/60 backdrop-blur-sm border-2 border-zinc-200/60 rounded-xl text-sm px-4 py-3 text-zinc-900 font-bold outline-none focus:border-zinc-700 focus:ring-[4px] focus:ring-zinc-700/10 focus:shadow-[0_0_25px_rgba(39,39,42,0.1)] transition-all duration-500 ease-out shadow-inner placeholder-zinc-400 caret-zinc-900" placeholder="이름 입력" />
+                  <label className="block text-[11px] font-black text-zinc-400 mb-1.5 ml-1 uppercase tracking-wider">Name</label>
+                  <input name="name" type="text" required autoComplete="off" className="w-full bg-white/60 backdrop-blur-sm border-2 border-zinc-200/60 rounded-xl text-sm px-4 py-3 text-zinc-900 font-bold outline-none focus:border-zinc-500 focus:ring-[4px] focus:ring-zinc-500/10 focus:shadow-lg transition-all duration-500 ease-out shadow-inner placeholder-zinc-400 caret-zinc-900" placeholder="이름 입력" />
                 </div>
               )}
               <div>
-                <label className="block text-[11px] font-bold text-zinc-500 mb-1.5 ml-1 uppercase tracking-wider">ID</label>
-                <input name="id" type="text" required autoComplete="off" className="w-full bg-white/60 backdrop-blur-sm border-2 border-zinc-200/60 rounded-xl text-sm px-4 py-3 text-zinc-900 font-bold outline-none focus:border-zinc-700 focus:ring-[4px] focus:ring-zinc-700/10 focus:shadow-[0_0_25px_rgba(39,39,42,0.1)] transition-all duration-500 ease-out shadow-inner placeholder-zinc-400 caret-zinc-900" placeholder="아이디 입력" />
+                <label className="block text-[11px] font-black text-zinc-400 mb-1.5 ml-1 uppercase tracking-wider">ID</label>
+                <input name="id" type="text" required autoComplete="off" className="w-full bg-white/60 backdrop-blur-sm border-2 border-zinc-200/60 rounded-xl text-sm px-4 py-3 text-zinc-900 font-bold outline-none focus:border-zinc-500 focus:ring-[4px] focus:ring-zinc-500/10 focus:shadow-lg transition-all duration-500 ease-out shadow-inner placeholder-zinc-400 caret-zinc-900" placeholder="아이디 입력" />
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-zinc-500 mb-1.5 ml-1 uppercase tracking-wider">Password</label>
-                <input name="password" type="password" required className="w-full bg-white/60 backdrop-blur-sm border-2 border-zinc-200/60 rounded-xl text-sm px-4 py-3 text-zinc-900 font-bold outline-none focus:border-zinc-700 focus:ring-[4px] focus:ring-zinc-700/10 focus:shadow-[0_0_25px_rgba(39,39,42,0.1)] transition-all duration-500 ease-out shadow-inner placeholder-zinc-400 caret-zinc-900" placeholder="비밀번호 입력" />
+                <label className="block text-[11px] font-black text-zinc-400 mb-1.5 ml-1 uppercase tracking-wider">Password</label>
+                <input name="password" type="password" required className="w-full bg-white/60 backdrop-blur-sm border-2 border-zinc-200/60 rounded-xl text-sm px-4 py-3 text-zinc-900 font-bold outline-none focus:border-zinc-500 focus:ring-[4px] focus:ring-zinc-500/10 focus:shadow-lg transition-all duration-500 ease-out shadow-inner placeholder-zinc-400 caret-zinc-900" placeholder="비밀번호 입력" />
               </div>
             </div>
             
-            {/* 패스워드 입력창과 버튼 간의 넓은 여백 확보 */}
-            <div className="mt-12">
-              <button type="submit" className="w-full bg-gradient-to-b from-zinc-700 to-zinc-900 hover:from-zinc-800 hover:to-black text-white text-sm font-bold py-3.5 rounded-xl transition-all shadow-[0_4px_14px_0_rgba(24,24,27,0.39)] hover:shadow-[0_6px_20px_rgba(24,24,27,0.23)] border border-zinc-700/50">
-                {loginTab === 'login' ? '로그인' : '계정 생성 요청'}
+            <div className="mt-8">
+              <button type="submit" className="w-full bg-gradient-to-b from-zinc-700 to-zinc-900 hover:from-zinc-800 hover:to-black text-white text-sm font-bold py-3.5 rounded-xl transition-all shadow-[0_4px_14px_0_rgba(24,24,27,0.39)] hover:shadow-[0_8px_30px_rgba(24,24,27,0.23)] border border-zinc-700/50">
+                {loginTab === 'login' ? 'Log In' : '계정 생성 요청'}
               </button>
             </div>
           </form>
         </div>
 
-        {/* 승인 모달 (박스 외부로 분리하여 배경 전체 Dim 처리) */}
         {showAdminModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm">
-            <div className="bg-white/90 backdrop-blur-2xl p-6 rounded-2xl w-80 shadow-[0_20px_60px_rgba(0,0,0,0.2)] border border-white transform animate-in fade-in zoom-in-95 duration-200">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-sm font-black text-zinc-800 flex items-center gap-2">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-900/60 backdrop-blur-sm transition-all duration-300">
+            <div className="bg-white/90 backdrop-blur-2xl p-6 rounded-3xl w-80 shadow-[0_20px_60px_rgba(0,0,0,0.3)] border border-white transform animate-in fade-in zoom-in-95 duration-300">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-[13px] font-black text-zinc-800 flex items-center gap-2 uppercase tracking-wide">
                   <Settings size={16}/> {isAdminAuthenticated ? '가입 대기열 관리' : '관리자 시스템 승인'}
                 </h3>
               </div>
               
               {!isAdminAuthenticated ? (
                 <form onSubmit={handleAdminAuth}>
-                  <input type="password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} required placeholder="승인 비밀번호 입력" className="w-full bg-white/60 backdrop-blur-sm border-2 border-zinc-200/60 rounded-xl text-sm px-4 py-3 text-zinc-900 font-bold outline-none focus:border-zinc-700 focus:ring-[4px] focus:ring-zinc-700/10 focus:shadow-[0_0_25px_rgba(39,39,42,0.1)] transition-all duration-500 ease-out caret-zinc-900 shadow-inner mb-4" />
-                  <div className="flex justify-end gap-2">
-                    <button type="button" onClick={() => setShowAdminModal(false)} className="px-4 py-2 text-xs font-bold text-zinc-500 hover:bg-zinc-100 rounded-lg transition-all">취소</button>
-                    <button type="submit" className="px-4 py-2 bg-zinc-800 text-white rounded-lg text-xs font-bold shadow-md hover:bg-black transition-all">인증 확인</button>
+                  <input type="password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} required placeholder="승인 비밀번호 입력" className="w-full bg-white/60 backdrop-blur-sm border-2 border-zinc-200/60 rounded-xl text-sm px-4 py-3 text-zinc-900 font-bold outline-none focus:border-zinc-500 focus:ring-[4px] focus:ring-zinc-500/10 focus:shadow-lg transition-all duration-500 ease-out caret-zinc-900 shadow-inner mb-6" />
+                  <div className="flex justify-end gap-2.5">
+                    <button type="button" onClick={() => setShowAdminModal(false)} className="px-5 py-2.5 text-xs font-bold text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 rounded-xl transition-all">취소</button>
+                    <button type="submit" className="px-5 py-2.5 bg-gradient-to-b from-zinc-700 to-zinc-900 hover:from-zinc-800 hover:to-black text-white rounded-xl text-xs font-bold shadow-[0_4px_14px_0_rgba(24,24,27,0.39)] transition-all">인증 확인</button>
                   </div>
                 </form>
               ) : (
                 <div>
-                  <div className="max-h-48 overflow-y-auto custom-scrollbar space-y-2 mb-4">
+                  <div className="max-h-48 overflow-y-auto custom-scrollbar space-y-2.5 mb-6">
                     {pendingUsers.length === 0 ? (
                       <p className="text-xs text-zinc-400 text-center py-6 font-bold">승인 대기 중인 요청이 없습니다.</p>
                     ) : (
                       pendingUsers.map(u => (
                         <div key={u.id} className="flex justify-between items-center p-3 bg-white border border-zinc-200/80 rounded-xl shadow-sm">
                           <div>
-                            <p className="text-xs font-black text-zinc-800">{u.name}</p>
+                            <p className="text-[13px] font-black text-zinc-800">{u.name}</p>
                             <p className="text-[10px] font-bold text-zinc-500">{u.id}</p>
                           </div>
-                          <button onClick={() => handleApproveUser(u)} className="px-3 py-1.5 bg-zinc-800 text-white text-[10px] font-bold rounded-lg shadow-sm hover:bg-zinc-900 transition-all">승인</button>
+                          <button onClick={() => handleApproveUser(u)} className="px-3.5 py-2 bg-zinc-800 text-white text-[10px] font-bold rounded-lg shadow-sm hover:bg-zinc-900 transition-all">승인</button>
                         </div>
                       ))
                     )}
                   </div>
                   <div className="flex justify-end">
-                    <button type="button" onClick={() => {setShowAdminModal(false); setIsAdminAuthenticated(false);}} className="px-4 py-2 text-xs font-bold text-zinc-500 hover:bg-zinc-100 rounded-lg transition-all w-full border border-zinc-200/80">닫기</button>
+                    <button type="button" onClick={() => {setShowAdminModal(false); setIsAdminAuthenticated(false);}} className="px-5 py-2.5 text-xs font-bold text-zinc-500 hover:bg-zinc-100 rounded-xl transition-all w-full border border-zinc-200/80">닫기</button>
                   </div>
                 </div>
               )}
@@ -514,9 +667,11 @@ export default function QAApp() {
       { name: 'BLOCK', value: totalBlock, color: COLORS.block },
     ].filter(d => d.value > 0);
 
+    // 요청사항 3: 타이틀 "Dashboard" 적용
     return (
-      <Layout title="시스템 오버뷰">
+      <Layout title="Dashboard">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-6">
+          {/* 요청사항 5: 카드 그림자 강화 (shadow-[0_12px_40px_rgba(0,0,0,0.08)]) */}
           <StatCard title="총 프로젝트" value={data.projects.length} icon={<Folder size={20}/>} color="text-zinc-600" bg="bg-zinc-100/50" border="border-zinc-200/50" />
           <StatCard title="테스트 케이스" value={totalCases} icon={<FileSpreadsheet size={20}/>} color="text-zinc-700" bg="bg-zinc-100" border="border-zinc-200" />
           <StatCard title="완료된 런" value={data.runs.filter(r => r.status === 'completed').length} icon={<CheckCircle size={20}/>} color="text-emerald-600" bg="bg-emerald-50" border="border-emerald-100" />
@@ -524,7 +679,7 @@ export default function QAApp() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 h-[340px]">
-          <div className="bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgba(0,0,0,0.04)] rounded-2xl p-6 flex flex-col">
+          <div className="bg-white/80 backdrop-blur-xl border border-white shadow-[0_12px_40px_rgba(0,0,0,0.08)] rounded-2xl p-6 flex flex-col">
             <h3 className="text-[13px] font-bold text-zinc-800 mb-4">전체 테스트 상태</h3>
             <div className="flex-1 min-h-0 relative">
               {pieData.length > 0 ? (
@@ -551,7 +706,7 @@ export default function QAApp() {
             </div>
           </div>
 
-          <div className="col-span-1 lg:col-span-2 bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgba(0,0,0,0.04)] rounded-2xl p-6 flex flex-col">
+          <div className="col-span-1 lg:col-span-2 bg-white/80 backdrop-blur-xl border border-white shadow-[0_12px_40px_rgba(0,0,0,0.08)] rounded-2xl p-6 flex flex-col">
             <div className="flex justify-between items-center mb-5">
               <h3 className="text-[13px] font-bold text-zinc-800">최근 테스트 런</h3>
             </div>
@@ -570,7 +725,7 @@ export default function QAApp() {
                   const progress = Math.round(((pCount + fCount + bCount) / total) * 100) || 0;
 
                   return (
-                    <div key={run.id} onClick={() => { setActiveRunId(run.id); setCurrentView('execute_run'); }} className="group bg-white/60 border border-zinc-200/60 rounded-xl p-4 cursor-pointer hover:bg-white hover:border-zinc-400 hover:shadow-[0_4px_20px_rgba(24,24,27,0.08)] transition-all duration-300">
+                    <div key={run.id} onClick={() => { setActiveRunId(run.id); setCurrentView('execute_run'); }} className="group bg-white/60 border border-zinc-200/60 rounded-xl p-4 cursor-pointer hover:bg-white hover:border-zinc-400 hover:shadow-[0_8px_30px_rgba(24,24,27,0.12)] transition-all duration-300">
                       <div className="flex justify-between items-start mb-3">
                         <div>
                           <h4 className="text-sm font-bold text-zinc-800 group-hover:text-zinc-900 transition-colors tracking-tight">{run.name}</h4>
@@ -626,7 +781,7 @@ export default function QAApp() {
     return (
       <Layout title="새 프로젝트 생성">
         <div className="max-w-xl mx-auto mt-8">
-          <div className="bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgba(0,0,0,0.04)] rounded-2xl p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="bg-white/80 backdrop-blur-xl border border-white shadow-[0_12px_40px_rgba(0,0,0,0.08)] rounded-2xl p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <h2 className="text-[15px] font-bold text-zinc-800 mb-6 flex items-center gap-2">
               <FolderPlus size={18} className="text-zinc-700"/> 프로젝트 정보 입력
             </h2>
@@ -694,7 +849,7 @@ export default function QAApp() {
         </div>
 
         {isProjectSettingsOpen && (
-            <div className="mb-6 p-5 bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgba(0,0,0,0.06)] rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="mb-6 p-5 bg-white/80 backdrop-blur-xl border border-white shadow-[0_12px_40px_rgba(0,0,0,0.08)] rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
                 <h3 className="text-[13px] font-bold text-zinc-800 mb-4 flex items-center gap-1.5"><Settings size={14}/> 프로젝트 설정</h3>
                 <form onSubmit={handleUpdateProject} className="flex items-end gap-3">
                     <div className="flex-1">
@@ -718,7 +873,7 @@ export default function QAApp() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgba(0,0,0,0.04)] rounded-2xl p-6">
+          <div className="bg-white/80 backdrop-blur-xl border border-white shadow-[0_12px_40px_rgba(0,0,0,0.08)] rounded-2xl p-6">
             <h3 className="text-[13px] font-bold text-zinc-800 mb-4 flex items-center gap-2">
               <Folder size={16} className="text-zinc-500"/> 테스트 스위트 구성
             </h3>
@@ -732,7 +887,7 @@ export default function QAApp() {
                 projSuites.map(suite => {
                   const caseCount = data.cases.filter(c => c.suiteId === suite.id).length;
                   return (
-                    <div key={suite.id} className="group bg-white/60 border border-zinc-200/60 rounded-xl p-4 flex justify-between items-center hover:bg-white hover:border-zinc-400 hover:shadow-[0_4px_20px_rgba(24,24,27,0.08)] transition-all duration-300 cursor-pointer"
+                    <div key={suite.id} className="group bg-white/60 border border-zinc-200/60 rounded-xl p-4 flex justify-between items-center hover:bg-white hover:border-zinc-400 hover:shadow-[0_8px_30px_rgba(24,24,27,0.12)] transition-all duration-300 cursor-pointer"
                          onClick={() => { setActiveSuiteId(suite.id); setCurrentView('suite_detail'); }}>
                       <div>
                         <h4 className="text-[13px] font-bold text-zinc-800 group-hover:text-zinc-900 transition-colors">{suite.name}</h4>
@@ -748,7 +903,7 @@ export default function QAApp() {
             </div>
           </div>
 
-          <div className="bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgba(0,0,0,0.04)] rounded-2xl p-6">
+          <div className="bg-white/80 backdrop-blur-xl border border-white shadow-[0_12px_40px_rgba(0,0,0,0.08)] rounded-2xl p-6">
             <h3 className="text-[13px] font-bold text-zinc-800 mb-4 flex items-center gap-2">
               <Activity size={16} className="text-emerald-500"/> 활성 테스트 런
             </h3>
@@ -760,7 +915,7 @@ export default function QAApp() {
                 </div>
               ) : (
                 projRuns.map(run => (
-                  <div key={run.id} onClick={() => { setActiveRunId(run.id); setCurrentView('execute_run'); }} className="group bg-white/60 border border-zinc-200/60 rounded-xl p-4 cursor-pointer hover:bg-white hover:border-emerald-300 hover:shadow-[0_4px_20px_rgb(16,185,129,0.08)] transition-all duration-300">
+                  <div key={run.id} onClick={() => { setActiveRunId(run.id); setCurrentView('execute_run'); }} className="group bg-white/60 border border-zinc-200/60 rounded-xl p-4 cursor-pointer hover:bg-white hover:border-emerald-300 hover:shadow-[0_8px_30px_rgb(16,185,129,0.12)] transition-all duration-300">
                     <div className="flex justify-between items-center">
                       <h4 className="text-[13px] font-bold text-zinc-800 group-hover:text-emerald-700 transition-colors">{run.name}</h4>
                       <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold border ${run.status === 'completed' ? 'bg-zinc-100/50 text-zinc-500 border-zinc-200/60' : 'bg-emerald-50 text-emerald-600 border-emerald-200/60'}`}>
@@ -860,7 +1015,7 @@ export default function QAApp() {
 
     return (
       <Layout title="데이터 업로드 및 스위트 생성">
-        <div className="max-w-2xl mx-auto mt-6 bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgba(0,0,0,0.04)] rounded-2xl overflow-hidden">
+        <div className="max-w-2xl mx-auto mt-6 bg-white/80 backdrop-blur-xl border border-white shadow-[0_12px_40px_rgba(0,0,0,0.08)] rounded-2xl overflow-hidden">
           <div className="p-6 border-b border-zinc-200/50 bg-zinc-50/30 backdrop-blur-md">
             <h2 className="text-[15px] font-bold text-zinc-800 flex items-center gap-2">
               <UploadCloud className="text-zinc-700" size={20}/>
@@ -954,7 +1109,7 @@ export default function QAApp() {
         </div>
 
         {isSuiteSettingsOpen && (
-            <div className="mb-6 p-5 bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgba(0,0,0,0.06)] rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="mb-6 p-5 bg-white/80 backdrop-blur-xl border border-white shadow-[0_12px_40px_rgba(0,0,0,0.08)] rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
                 <h3 className="text-[13px] font-bold text-zinc-800 mb-4 flex items-center gap-1.5"><Settings size={14}/> 스위트 설정</h3>
                 <form onSubmit={handleUpdateSuite} className="flex items-end gap-3">
                     <div className="flex-1">
@@ -968,7 +1123,7 @@ export default function QAApp() {
             </div>
         )}
 
-        <div className="bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgba(0,0,0,0.04)] rounded-2xl overflow-hidden overflow-x-auto custom-scrollbar">
+        <div className="bg-white/80 backdrop-blur-xl border border-white shadow-[0_12px_40px_rgba(0,0,0,0.08)] rounded-2xl overflow-hidden overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-collapse min-w-max">
             <thead>
               <tr className="bg-zinc-50/80 backdrop-blur-md border-b border-zinc-200/80 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
@@ -1004,13 +1159,12 @@ export default function QAApp() {
     
     const handleCaseToggle = (caseId) => { setSelectedRunCases(prev => prev.includes(caseId) ? prev.filter(id => id !== caseId) : [...prev, caseId]); };
     const handleSuiteToggle = (e, suiteId, isChecked) => {
-        e.stopPropagation(); // 스위트 접기/펴기 이벤트와 충돌 방지
+        e.stopPropagation(); 
         const suiteCases = data.cases.filter(c => c.suiteId === suiteId).map(c=>c.id);
         if (isChecked) setSelectedRunCases(prev => [...new Set([...prev, ...suiteCases])]);
         else setSelectedRunCases(prev => prev.filter(id => !suiteCases.includes(id)));
     };
 
-    // 요청사항 3: 스위트 접기/펼치기 토글 함수
     const handleCollapseToggle = (suiteId) => {
        setCollapsedSuites(prev => prev.includes(suiteId) ? prev.filter(id => id !== suiteId) : [...prev, suiteId]);
     };
@@ -1033,7 +1187,7 @@ export default function QAApp() {
 
     return (
       <Layout title="테스트 런 생성">
-        <div className="max-w-4xl mx-auto mt-6 bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgba(0,0,0,0.04)] rounded-2xl p-8">
+        <div className="max-w-4xl mx-auto mt-6 bg-white/80 backdrop-blur-xl border border-white shadow-[0_12px_40px_rgba(0,0,0,0.08)] rounded-2xl p-8">
           <form onSubmit={handleCreateRun}>
             <div className="mb-8">
               <label className="block text-[11px] font-bold text-zinc-500 mb-1.5 ml-1 uppercase tracking-wider">Test Run Name</label>
@@ -1056,7 +1210,6 @@ export default function QAApp() {
 
                   return (
                     <div key={suite.id} className="border-b border-zinc-200/60 last:border-0">
-                      {/* 요청사항 3: 아코디언 헤더 */}
                       <div className="flex items-center gap-3 p-4 bg-zinc-50/80 backdrop-blur-md border-b border-zinc-200/60 sticky top-0 z-10 cursor-pointer hover:bg-zinc-100/80 transition-colors" onClick={() => handleCollapseToggle(suite.id)}>
                         <ChevronDown size={16} className={`text-zinc-400 transition-transform duration-300 ${isCollapsed ? '-rotate-90' : ''}`} />
                         <input type="checkbox" checked={isAllChecked} ref={el => el && (el.indeterminate = isSomeChecked)} onClick={(e) => e.stopPropagation()} onChange={(e) => handleSuiteToggle(e, suite.id, e.target.checked)} className="w-4 h-4 text-emerald-500 border-zinc-300 rounded focus:ring-emerald-500/20 cursor-pointer transition-all" />
@@ -1097,7 +1250,7 @@ export default function QAApp() {
 
             <div className="flex justify-end gap-3 pt-6 mt-4 border-t border-zinc-100">
               <button type="button" onClick={() => setCurrentView('project')} className="px-5 py-2.5 rounded-xl text-xs font-bold text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 transition-all">취소</button>
-              <button type="submit" disabled={projSuites.length===0} className="px-6 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-b from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 disabled:opacity-50 text-white shadow-[0_4px_14px_0_rgb(16,185,129,0.39)] hover:shadow-[0_6px_20px_rgb(16,185,129,0.23)] border border-emerald-500/50 transition-all flex items-center gap-2">
+              <button type="submit" disabled={projSuites.length===0} className="px-6 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-b from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 disabled:opacity-50 text-white shadow-[0_4px_14px_0_rgb(16,185,129,0.39)] hover:shadow-[0_8px_30px_rgb(16,185,129,0.23)] border border-emerald-500/50 transition-all flex items-center gap-2">
                 <Play size={16} fill="currentColor"/> 실행 시작
               </button>
             </div>
@@ -1178,7 +1331,7 @@ export default function QAApp() {
           )}
         </div>
 
-        <div className="bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgba(0,0,0,0.04)] rounded-2xl p-5 mb-5 flex flex-col gap-3">
+        <div className="bg-white/80 backdrop-blur-xl border border-white shadow-[0_12px_40px_rgba(0,0,0,0.08)] rounded-2xl p-5 mb-5 flex flex-col gap-3">
            <div className="flex justify-between items-center">
               <span className="text-[13px] font-black text-zinc-800 tracking-tight">전체 진행 상황 ({progress}%)</span>
               <div className="flex gap-5 text-[11px] font-bold">
@@ -1210,7 +1363,7 @@ export default function QAApp() {
 
         <div className="flex h-[calc(100vh-230px)] gap-5">
           
-          <div className="flex-1 flex flex-col bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgba(0,0,0,0.04)] rounded-2xl overflow-hidden transition-all min-w-0">
+          <div className="flex-1 flex flex-col bg-white/80 backdrop-blur-xl border border-white shadow-[0_12px_40px_rgba(0,0,0,0.08)] rounded-2xl overflow-hidden transition-all min-w-0">
             <div className="p-4 border-b border-zinc-200/60 bg-zinc-50/50 backdrop-blur-md flex justify-between items-center relative z-20">
               <div className="relative">
                  <button onClick={() => setIsHeaderDropdownOpen(!isHeaderDropdownOpen)} className="text-[11px] font-bold px-3 py-2 bg-white border border-zinc-200/80 rounded-lg text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 flex items-center gap-1.5 shadow-sm transition-all">
@@ -1279,7 +1432,6 @@ export default function QAApp() {
                       </div>
                     </div>
 
-                    {/* 요청사항 4: 표시 항목 열(Grid/Column) 배치 */}
                     {selectedHeaders.length > 0 && (
                         <div className="pl-6 pt-1 cursor-pointer" onClick={() => { setSelectedCaseId(c.id); if(!isDetailOpen) setIsDetailOpen(true); }}>
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -1304,7 +1456,7 @@ export default function QAApp() {
           </div>
 
           {(isDetailOpen || run.status === 'completed') && (
-            <div className="w-1/3 min-w-[340px] flex flex-col bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgba(0,0,0,0.04)] rounded-2xl overflow-hidden transition-all duration-500">
+            <div className="w-1/3 min-w-[340px] flex flex-col bg-white/80 backdrop-blur-xl border border-white shadow-[0_12px_40px_rgba(0,0,0,0.08)] rounded-2xl overflow-hidden transition-all duration-500">
               {run.status === 'completed' && (!selectedCase || !isDetailOpen) ? (
                 <div className="flex-1 p-8 flex flex-col items-center justify-center bg-zinc-50/50">
                   <div className="w-16 h-16 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-2xl flex items-center justify-center mb-6 shadow-[0_8px_20px_rgb(16,185,129,0.3)]">
@@ -1402,7 +1554,7 @@ export default function QAApp() {
 }
 
 const StatCard = ({ title, value, icon, color, bg, border }) => (
-  <div className={`bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgba(0,0,0,0.04)] rounded-2xl p-5 flex items-center justify-between group hover:-translate-y-1 transition-transform duration-300`}>
+  <div className={`bg-white/80 backdrop-blur-xl border border-white shadow-[0_12px_40px_rgba(0,0,0,0.08)] rounded-2xl p-5 flex items-center justify-between group hover:-translate-y-1 transition-transform duration-300`}>
     <div>
       <p className="text-zinc-500 text-[11px] font-bold mb-1.5 uppercase tracking-wider">{title}</p>
       <h3 className="text-3xl font-black text-zinc-800 tracking-tight">{value}</h3>
