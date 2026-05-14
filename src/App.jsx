@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, 
   PieChart, Pie, Cell, LineChart, Line 
@@ -93,6 +94,7 @@ export default function QAApp() {
   const [isDetailOpen, setIsDetailOpen] = useState(false); 
   const [selectedHeaders, setSelectedHeaders] = useState([]); 
   const [isHeaderDropdownOpen, setIsHeaderDropdownOpen] = useState(false);
+  const [draggedHeader, setDraggedHeader] = useState(null);
 
   const [toastMessage, setToastMessage] = useState(null);
 
@@ -130,8 +132,14 @@ export default function QAApp() {
 
   // 실시간 동기화 상태 감지용 레퍼런스
   const skipNextSync = useRef(false);
-  const isInitialSyncDone = useRef(false); // 추가: 초기 데이터 로드 완료 여부 추적
+  const isInitialSyncDone = useRef(false);
   const [activeUsers, setActiveUsers] = useState([]);
+  
+  const [tooltipInfo, setTooltipInfo] = useState(null);
+  const [editingCell, setEditingCell] = useState(null);
+  const [editingValue, setEditingValue] = useState("");
+  const [hiddenCols, setHiddenCols] = useState([]);
+
 
   useEffect(() => {
     const fadeTimer = setTimeout(() => setIsSplashFading(true), 2000); 
@@ -167,10 +175,9 @@ export default function QAApp() {
       if(user) setProfileData(prev => ({ ...prev, name: user.name, nickname: user.nickname, photo: user.photo }));
   }, [user]);
 
-  // 파이어베이스 실시간 데이터 동기화 리스너 (수신) 및 헤더 유저 리스트 가져오기
   useEffect(() => {
       if (!user) {
-          isInitialSyncDone.current = false; // 로그아웃 시 동기화 상태 초기화
+          isInitialSyncDone.current = false;
           return;
       }
       
@@ -180,12 +187,12 @@ export default function QAApp() {
       if (db) {
          unsubData = onSnapshot(doc(db, "qa_data", "shared_workspace"), (docSnap) => {
             if (docSnap.exists()) {
-               skipNextSync.current = true; // 외부 변경에 의한 업데이트이므로 역송신(Loop) 방지
+               skipNextSync.current = true;
                setData(docSnap.data());
-               isInitialSyncDone.current = true; // 수신 완료 마킹
+               isInitialSyncDone.current = true;
             } else {
                setDoc(doc(db, "qa_data", "shared_workspace"), INITIAL_DATA);
-               isInitialSyncDone.current = true; // 최초 생성 완료 마킹
+               isInitialSyncDone.current = true;
             }
          });
 
@@ -202,7 +209,7 @@ export default function QAApp() {
              skipNextSync.current = true;
              setData(JSON.parse(localData));
          }
-         isInitialSyncDone.current = true; // 수신 완료 마킹
+         isInitialSyncDone.current = true;
          const localUsers = JSON.parse(localStorage.getItem('qa_nexus_users') || '[]');
          setActiveUsers(localUsers.filter(u => u.status === 'approved'));
       }
@@ -213,9 +220,8 @@ export default function QAApp() {
       };
   }, [user]);
 
-  // 로컬 데이터 변경 시 파이어베이스로 저장 (송신)
   useEffect(() => {
-     if (!isInitialSyncDone.current) return; // 추가: 데이터를 완벽히 불러오기 전엔 절대 덮어쓰지 않음
+     if (!isInitialSyncDone.current) return;
      if (skipNextSync.current) {
          skipNextSync.current = false;
          return;
@@ -225,7 +231,7 @@ export default function QAApp() {
      } else {
          localStorage.setItem('qa_nexus_shared_data', JSON.stringify(data));
      }
-  }, [data]); // user 의존성 제거 (로그인 시 불필요한 송신 방지)
+  }, [data]);
 
   useEffect(() => {
     if (currentView === 'execute_run' && activeRunId) {
@@ -299,6 +305,27 @@ export default function QAApp() {
     .bg-indigo-50 { background-color: rgba(244, 244, 245, 0.5) !important; }
 
     .border-l-blue-600 { border-left-color: rgba(63, 63, 70, 0.9) !important; }
+    
+    /* 커스텀 스크롤바 */
+    .custom-scrollbar::-webkit-scrollbar {
+        height: 10px;
+        width: 10px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+        background: rgba(241, 245, 249, 0.8);
+        border-radius: 8px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: rgba(203, 213, 225, 0.8);
+        border-radius: 8px;
+        border: 2px solid rgba(241, 245, 249, 0.8);
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: rgba(148, 163, 184, 0.9);
+    }
+    .custom-scrollbar::-webkit-scrollbar-corner {
+        background: transparent;
+    }
   `;
 
   const handleLogin = async (e) => {
@@ -442,7 +469,6 @@ export default function QAApp() {
       if (file) {
           const reader = new FileReader();
           reader.onload = (evt) => {
-             // 파이어베이스 1MB 용량 제한을 우회하기 위한 캔버스 자동 리사이징(압축) 로직 추가
              const img = new Image();
              img.onload = () => {
                  const canvas = document.createElement('canvas');
@@ -460,7 +486,7 @@ export default function QAApp() {
                  
                  const ctx = canvas.getContext('2d');
                  ctx.drawImage(img, 0, 0, width, height);
-                 const dataUrl = canvas.toDataURL('image/jpeg', 0.8); // 80% 화질로 압축
+                 const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
                  setProfileData(prev => ({ ...prev, photo: dataUrl }));
              };
              img.src = evt.target.result;
@@ -574,8 +600,8 @@ export default function QAApp() {
         <ChevronRight size={14} className={`transition-transform duration-500 ${isSidebarOpen ? 'rotate-180' : ''}`} />
       </button>
 
-      <aside className={`transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] bg-white/60 backdrop-blur-2xl flex flex-col z-20 shadow-[4px_0_24px_rgb(0,0,0,0.02)] relative ${isSidebarOpen ? 'w-60 border-r border-slate-200/50' : 'w-0 border-r-0'}`}>
-        <div className={`w-60 h-full flex flex-col overflow-hidden transition-opacity duration-500 ${isSidebarOpen ? 'opacity-100' : 'opacity-0'}`}>
+      <aside className={`transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] bg-white/60 backdrop-blur-2xl flex flex-col z-20 shadow-[4px_0_24px_rgb(0,0,0,0.02)] relative overflow-hidden ${isSidebarOpen ? 'w-60 border-r border-slate-200/50' : 'w-0 border-r-0'}`}>
+        <div className={`w-60 h-full flex flex-col overflow-hidden transition-opacity duration-500 ${isSidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
           <div className="h-14 flex items-center gap-2.5 px-5 border-b border-slate-200/50 shrink-0">
             <img src="/icon-192x192.png" className="w-6 h-6 object-contain" alt="Logo" onError={(e) => { e.target.onerror = null; e.target.outerHTML = "<div class='w-7 h-7 rounded-lg bg-zinc-800 flex items-center justify-center shadow-md'><svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/></svg></div>"; }}/>
             <h1 className="text-[15px] font-bold text-zinc-800 tracking-tight">Caseai</h1>
@@ -1016,8 +1042,8 @@ export default function QAApp() {
       { name: 'BLOCK', value: totalBlock, color: COLORS.block },
     ].filter(d => d.value > 0);
 
-    return (
-      <Layout title="Dashboard">
+    return Layout({ title: "Dashboard", children: (
+      <>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-6">
           <StatCard title="총 프로젝트" value={data.projects.length} icon={<Folder size={20}/>} color="text-zinc-600" bg="bg-zinc-100" border="border-zinc-200" />
           <StatCard title="테스트 케이스" value={totalCases} icon={<FileSpreadsheet size={20}/>} color="text-zinc-600" bg="bg-zinc-100" border="border-zinc-200" />
@@ -1108,13 +1134,13 @@ export default function QAApp() {
             </div>
           </div>
         </div>
-      </Layout>
-    );
+      </>
+    )});
   }
 
   if (currentView === 'project') {
     const project = data.projects.find(p => p.id === activeProjectId);
-    if (!project) return <Layout title="Not Found"><p>프로젝트를 찾을 수 없습니다.</p></Layout>;
+    if (!project) return Layout({ title: "Not Found", children: <p>프로젝트를 찾을 수 없습니다.</p> });
 
     const projSuites = data.suites.filter(s => s.projectId === project.id);
     const projRuns = data.runs.filter(r => r.projectId === project.id);
@@ -1127,8 +1153,8 @@ export default function QAApp() {
         setToastMessage('프로젝트 이름이 수정되었습니다.');
     };
 
-    return (
-      <Layout title="Project Details">
+    return Layout({ title: "Project Details", children: (
+      <>
         <div className="flex justify-between items-start mb-6">
           <div className="flex-1">
              <div className="flex items-center gap-3 mb-1.5">
@@ -1221,8 +1247,8 @@ export default function QAApp() {
             </div>
           </div>
         </div>
-      </Layout>
-    );
+      </>
+    )});
   }
 
   if (currentView === 'suite_detail') {
@@ -1243,9 +1269,42 @@ export default function QAApp() {
         setCurrentView('project');
     };
 
-    return (
-      <Layout title={`스위트: ${suite?.name}`}>
-        <div className="mb-5 flex justify-between items-center">
+    const handleDoubleClickCell = (c, header) => {
+        setEditingCell({ id: c.id, header: header });
+        setEditingValue(c.fields[header] || "");
+    };
+
+    const saveEditingCellLocal = (val) => {
+        if (!editingCell) return;
+        setData(prev => ({
+            ...prev,
+            cases: prev.cases.map(c => c.id === editingCell.id ? { ...c, fields: { ...c.fields, [editingCell.header]: val } } : c)
+        }));
+        setEditingCell(null);
+    };
+
+    const handleDeleteCaseRow = (caseId) => {
+        setData(prev => ({ ...prev, cases: prev.cases.filter(c => c.id !== caseId) }));
+        setToastMessage('케이스가 삭제되었습니다.');
+    };
+
+    const handleInsertCaseRow = (index) => {
+        const newCaseId = generateId();
+        const emptyFields = {};
+        suite.headers.forEach(h => emptyFields[h] = "");
+        const newCase = { id: newCaseId, suiteId: activeSuiteId, title: "새로운 테스트 케이스", priority: "Medium", fields: emptyFields };
+        
+        setData(prev => {
+           const newCases = [...prev.cases];
+           newCases.splice(index, 0, newCase);
+           return { ...prev, cases: newCases };
+        });
+        setToastMessage('새로운 케이스가 삽입되었습니다.');
+    };
+
+    return Layout({ title: `스위트: ${suite?.name}`, children: (
+      <>
+        <div className="mb-5 flex justify-between items-center relative z-20">
           <button onClick={() => setCurrentView('project')} className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1.5 font-bold bg-white/60 backdrop-blur-md px-3 py-2 rounded-lg border border-slate-200/60 shadow-sm transition-all hover:bg-white hover:shadow-md">
             <ChevronRight className="rotate-180" size={16}/> 프로젝트로 돌아가기
           </button>
@@ -1254,11 +1313,30 @@ export default function QAApp() {
             <button onClick={() => { setEditSuiteName(suite?.name || ''); setIsSuiteSettingsOpen(true); }} className="text-slate-400 hover:text-zinc-600 hover:bg-zinc-100 p-1.5 rounded-lg transition-all ml-2">
                 <Settings size={18} />
             </button>
+            <div className="relative">
+                 <button onClick={() => setIsHeaderDropdownOpen(!isHeaderDropdownOpen)} className="text-[11px] font-bold px-3 py-2 bg-white border border-slate-200/80 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-slate-900 flex items-center gap-1.5 shadow-sm transition-all">
+                    <Filter size={14}/> 항목 관리
+                 </button>
+                 {isHeaderDropdownOpen && (
+                    <div className="absolute top-full mt-2 right-0 z-50 bg-white/90 backdrop-blur-xl border border-slate-200/80 shadow-[0_10px_40px_rgb(0,0,0,0.1)] rounded-xl p-3 w-56 max-h-56 overflow-y-auto">
+                       <p className="text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-wider ml-1">목록에서 숨길 항목</p>
+                       {suite?.headers?.map(h => (
+                          <label key={h} className="flex items-center gap-2.5 py-1.5 px-1 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors">
+                             <input type="checkbox" checked={hiddenCols.includes(h)} onChange={(e) => {
+                                 if (e.target.checked) setHiddenCols([...hiddenCols, h]);
+                                 else setHiddenCols(hiddenCols.filter(sh => sh !== h));
+                             }} className="w-3.5 h-3.5 text-zinc-600 rounded border-slate-300 focus:ring-zinc-600/20" />
+                             <span className="text-[12px] font-bold text-slate-700 truncate">{h}</span>
+                          </label>
+                       ))}
+                    </div>
+                 )}
+            </div>
           </div>
         </div>
 
         {isSuiteSettingsOpen && (
-            <div className="mb-6 p-5 bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="mb-6 p-5 bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300 relative z-20">
                 <h3 className="text-[13px] font-bold text-slate-800 mb-4 flex items-center gap-1.5"><Settings size={14}/> 스위트 설정</h3>
                 <form onSubmit={handleUpdateSuite} className="flex items-end gap-3">
                     <div className="flex-1">
@@ -1272,35 +1350,133 @@ export default function QAApp() {
             </div>
         )}
 
-        <div className="bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-2xl overflow-hidden overflow-x-auto custom-scrollbar hover:shadow-[0_8px_40px_rgb(0,0,0,0.12)] transition-shadow">
-          <table className="w-full text-left border-collapse min-w-max">
-            <thead>
-              <tr className="bg-slate-50/80 backdrop-blur-md border-b border-slate-200/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                <th className="px-5 py-4 w-16 text-center">ID</th>
-                {suite?.headers?.map((header, idx) => (
-                  <th key={idx} className="px-5 py-4 whitespace-nowrap">{header}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100/80">
-              {cases.map((c, i) => (
-                <tr key={c.id} className="hover:bg-slate-50/50 transition-colors">
-                  <td className="px-5 py-3.5 text-[11px] font-mono font-bold text-slate-400 text-center">C{i+1}</td>
-                  {suite?.headers?.map((header, idx) => (
-                    <td key={idx} className="px-5 py-3.5 text-[13px] font-medium text-slate-700 max-w-[250px] truncate" title={c.fields?.[header] || ''}>
-                      {c.fields?.[header] || '-'}
-                    </td>
+        <div className="bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-2xl flex flex-col max-h-[calc(100vh-200px)] hover:shadow-[0_8px_40px_rgb(0,0,0,0.12)] transition-shadow relative z-10 overflow-hidden">
+          <div className="overflow-auto custom-scrollbar flex-1 pb-2 rounded-2xl">
+            <table className="w-full text-left border-collapse min-w-max relative">
+              <thead className="sticky top-0 z-40 shadow-sm">
+                <tr className="bg-slate-50/95 backdrop-blur-xl border-b border-slate-200/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  <th className="px-5 py-4 w-16 text-center rounded-tl-2xl">ID</th>
+                  {suite?.headers?.filter(h => !hiddenCols.includes(h)).map((header) => (
+                    <th key={header}
+                        draggable
+                        onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; setDraggedHeader(header); }}
+                        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                        onDrop={(e) => {
+                            e.preventDefault();
+                            if (!draggedHeader || draggedHeader === header) return;
+                            setData(prev => ({
+                                ...prev,
+                                suites: prev.suites.map(s => {
+                                    if (s.id === activeSuiteId) {
+                                        const newHeaders = [...s.headers];
+                                        const fromIdx = newHeaders.indexOf(draggedHeader);
+                                        const toIdx = newHeaders.indexOf(header);
+                                        newHeaders.splice(fromIdx, 1);
+                                        newHeaders.splice(toIdx, 0, draggedHeader);
+                                        return { ...s, headers: newHeaders };
+                                    }
+                                    return s;
+                                })
+                            }));
+                            setDraggedHeader(null);
+                        }}
+                        onDragEnd={() => setDraggedHeader(null)}
+                        className={`px-5 py-4 whitespace-nowrap cursor-grab active:cursor-grabbing transition-colors ${draggedHeader === header ? 'opacity-50 bg-slate-200' : 'hover:bg-slate-100/50'}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-300"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></span>
+                        {header}
+                      </div>
+                    </th>
                   ))}
+                  <th className="px-3 py-4 w-16 text-center rounded-tr-2xl"></th>
                 </tr>
-              ))}
-              {cases.length === 0 && (
-                <tr><td colSpan={suite?.headers ? suite.headers.length + 1 : 4} className="p-10 text-center text-[13px] font-medium text-slate-400">케이스가 없습니다.</td></tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-100/80">
+                {cases.length === 0 && (
+                  <tr><td colSpan={suite?.headers ? suite.headers.filter(h => !hiddenCols.includes(h)).length + 2 : 4} className="p-10 text-center text-[13px] font-medium text-slate-400">케이스가 없습니다.</td></tr>
+                )}
+                {cases.map((c, i) => (
+                  <React.Fragment key={c.id}>
+                    <tr className="group/add">
+                      <td colSpan={suite?.headers ? suite.headers.filter(h => !hiddenCols.includes(h)).length + 2 : 4} className="p-0 h-0 relative">
+                        <div className="absolute inset-x-0 -top-1.5 h-3 z-30 opacity-0 group-hover/add:opacity-100 flex items-center justify-center cursor-pointer" onClick={() => handleInsertCaseRow(i)}>
+                          <div className="w-full h-0.5 bg-emerald-400"></div>
+                          <div className="absolute w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center text-white shadow-md shadow-emerald-500/30 hover:scale-110 transition-transform"><Plus size={12} strokeWidth={4}/></div>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50 transition-colors group/row">
+                      <td className="px-5 py-3.5 text-[11px] font-mono font-bold text-slate-400 text-center">C{i+1}</td>
+                      {suite?.headers?.filter(h => !hiddenCols.includes(h)).map((header) => (
+                        <td key={header} className={`px-5 py-3.5 text-[13px] font-medium text-slate-700 max-w-[250px] relative group/cell ${editingCell?.id === c.id && editingCell?.header === header ? 'z-50' : ''}`} onDoubleClick={() => handleDoubleClickCell(c, header)}
+                            onMouseEnter={(e) => {
+                                if (c.fields?.[header]?.length > 15) {
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    setTooltipInfo({
+                                        text: c.fields[header],
+                                        x: rect.left + rect.width / 2,
+                                        y: rect.top - 10
+                                    });
+                                }
+                            }}
+                            onMouseLeave={() => setTooltipInfo(null)}
+                        >
+                          {editingCell?.id === c.id && editingCell?.header === header ? (
+                             <div className="absolute inset-x-2 top-1.5 z-50">
+                                 <textarea 
+                                    autoFocus 
+                                    defaultValue={editingValue} 
+                                    onFocus={(e) => {
+                                        const val = e.target.value;
+                                        e.target.value = '';
+                                        e.target.value = val;
+                                    }}
+                                    onBlur={(e) => saveEditingCellLocal(e.target.value)} 
+                                    onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.blur(); } }} 
+                                    className="w-full min-h-[50px] text-[12px] font-bold p-2.5 border-2 border-emerald-400 rounded-xl outline-none shadow-[0_10px_25px_rgb(16,185,129,0.15)] bg-white resize-none caret-emerald-600" 
+                                 />
+                             </div>
+                          ) : (
+                             <>
+                               <div className="truncate w-full">{c.fields?.[header] || '-'}</div>
+                             </>
+                          )}
+                        </td>
+                      ))}
+                      <td className="px-3 py-3.5 text-center align-middle">
+                          <button onClick={() => handleDeleteCaseRow(c.id)} className="text-slate-300 hover:text-rose-500 hover:bg-rose-50 p-1.5 rounded-lg transition-all opacity-0 group-hover/row:opacity-100">
+                             <XCircle size={16} />
+                          </button>
+                      </td>
+                    </tr>
+                  </React.Fragment>
+                ))}
+                {cases.length > 0 && (
+                   <tr className="group/add">
+                     <td colSpan={suite?.headers ? suite.headers.filter(h => !hiddenCols.includes(h)).length + 2 : 4} className="p-0 h-0 relative">
+                       <div className="absolute inset-x-0 -top-1.5 h-3 z-30 opacity-0 group-hover/add:opacity-100 flex items-center justify-center cursor-pointer" onClick={() => handleInsertCaseRow(cases.length)}>
+                         <div className="w-full h-0.5 bg-emerald-400"></div>
+                         <div className="absolute w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center text-white shadow-md shadow-emerald-500/30 hover:scale-110 transition-transform"><Plus size={12} strokeWidth={4}/></div>
+                       </div>
+                     </td>
+                   </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </Layout>
-    );
+
+      {tooltipInfo && typeof document !== 'undefined' && createPortal(
+          <div style={{ top: tooltipInfo.y, left: tooltipInfo.x, transform: 'translate(-50%, -100%)' }} 
+               className="fixed z-[9999] w-max max-w-[320px] bg-zinc-800 text-white text-[12px] font-medium p-3.5 rounded-xl shadow-[0_10px_30px_rgb(0,0,0,0.2)] whitespace-normal break-words leading-relaxed pointer-events-none before:content-[''] before:absolute before:top-full before:left-1/2 before:-translate-x-1/2 before:border-4 before:border-transparent before:border-t-zinc-800 animate-in fade-in zoom-in-95 duration-100">
+              <div className="flex items-center gap-1.5 mb-2 text-emerald-400 font-bold border-b border-zinc-700 pb-1.5"><Search size={12}/> 전체 내용</div>
+              {tooltipInfo.text}
+          </div>,
+          document.body
+      )}
+      </>
+    )});
   }
 
   if (currentView === 'create_run') {
@@ -1333,8 +1509,8 @@ export default function QAApp() {
       setCurrentView('execute_run');
     };
 
-    return (
-      <Layout title="테스트 런 생성">
+    return Layout({ title: "테스트 런 생성", children: (
+      <>
         <div className="max-w-4xl mx-auto mt-6 bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-2xl p-8 hover:shadow-[0_8px_40px_rgb(0,0,0,0.12)] transition-shadow">
           <form onSubmit={handleCreateRun}>
             <div className="mb-8">
@@ -1406,13 +1582,13 @@ export default function QAApp() {
             </div>
           </form>
         </div>
-      </Layout>
-    );
+      </>
+    )});
   }
 
   if (currentView === 'execute_run') {
     const run = data.runs.find(r => r.id === activeRunId);
-    if (!run) return <Layout title="Not Found"><p>Run Not Found</p></Layout>;
+    if (!run) return Layout({ title: "Not Found", children: <p>Run Not Found</p> });
 
     const caseIdsInRun = Object.keys(run.results || {});
     const runCases = data.cases.filter(c => caseIdsInRun.includes(c.id));
@@ -1466,8 +1642,8 @@ export default function QAApp() {
     const bCount = Object.values(run.results).filter(r => r.status === 'block').length;
     const progress = Math.round(((pCount + fCount + bCount) / total) * 100) || 0;
 
-    return (
-      <Layout title={`실행: ${run.name}`}>
+    return Layout({ title: `실행: ${run.name}`, children: (
+      <>
         <div className="mb-4 flex justify-between items-center">
           <button onClick={() => setCurrentView('project')} className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1.5 font-bold bg-white/60 backdrop-blur-md px-3 py-2 rounded-lg border border-slate-200/60 shadow-sm transition-all hover:bg-white hover:shadow-md">
             <ChevronRight className="rotate-180" size={16}/> 프로젝트로 돌아가기
@@ -1693,8 +1869,8 @@ export default function QAApp() {
             </div>
           )}
         </div>
-      </Layout>
-    );
+      </>
+    )});
   }
 
   return <div className="bg-[#f8fafc] h-screen flex items-center justify-center text-slate-500 text-sm font-bold tracking-widest">로딩 중...</div>;
