@@ -594,7 +594,7 @@ export default function QAApp() {
       reader.onload = (evt) => { try { processData(parseCSV(evt.target.result)); } catch(err) { setToastMessage('CSV 파싱 오류 발생'); } };
       reader.readAsText(file);
     } else {
-      if (!window.XLSX) { setToastMessage('라이브러리 로딩 중... 다시 시도해주세요.'); return; }
+      if (!window.XLSX) { setToastMessage('라이브러 로딩 중... 다시 시도해주세요.'); return; }
       reader.onload = (evt) => {
         try {
           const workbook = window.XLSX.read(new Uint8Array(evt.target.result), { type: 'array' });
@@ -1777,7 +1777,7 @@ ${JSON.stringify(simplifiedData)}
 
     return Layout({ title: "테스트 런 생성", children: (
       <>
-        <div className="max-w-4xl mx-auto mt-6 bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-2xl p-8 hover:shadow-[0_8px_40px_rgb(0,0,0,0.12)] transition-shadow">
+        <div className="max-w-4xl mx-auto mt-6 mb-12 bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-2xl p-8 hover:shadow-[0_8px_40px_rgb(0,0,0,0.12)] transition-shadow">
           
           <div className="mb-8 p-6 bg-gradient-to-br from-indigo-50/80 to-purple-50/80 border border-indigo-100/80 rounded-2xl shadow-inner relative overflow-hidden">
               <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-purple-400/10 rounded-full blur-3xl pointer-events-none"></div>
@@ -2027,7 +2027,7 @@ ${JSON.stringify(simplifiedData)}
            </div>
         </div>
 
-        <div className="flex h-[calc(100vh-230px)] gap-5">
+        <div className="flex h-[calc(100vh-260px)] mb-8 gap-5">
           <div className="flex-1 flex flex-col bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-2xl overflow-hidden transition-all min-w-0">
             <div className="p-4 border-b border-slate-200/60 bg-slate-50/50 backdrop-blur-md flex justify-between items-center relative z-20">
               <div className="relative">
@@ -2064,57 +2064,92 @@ ${JSON.stringify(simplifiedData)}
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar bg-white/40">
-              {filteredCases.map((c, idx) => {
-                const status = run.results[c.id].status;
-                const isSelected = selectedCaseId === c.id;
-                
-                let icon = <div className="w-3.5 h-3.5 rounded-full border-2 border-slate-300"></div>;
-                if (status === 'pass') icon = <CheckCircle size={16} className="text-emerald-500"/>;
-                if (status === 'fail') icon = <XCircle size={16} className="text-rose-500"/>;
-                if (status === 'block') icon = <AlertTriangle size={16} className="text-amber-500"/>;
-
-                return (
-                  <div key={c.id} 
-                    className={`p-4 border-b border-slate-100/80 transition-all duration-300 flex flex-col gap-3 last:border-0 ${isSelected ? 'bg-zinc-50/80 border-l-4 border-l-zinc-700' : 'hover:bg-slate-50/60 border-l-4 border-l-transparent'}`}>
+            <div className="flex-1 overflow-auto custom-scrollbar bg-white/40">
+              <table className="w-full text-left border-collapse relative z-0">
+                <thead className="sticky top-0 z-10 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+                  <tr className="bg-slate-50/95 backdrop-blur-xl text-[11px] font-bold text-slate-500 uppercase tracking-wider relative after:absolute after:inset-x-0 after:bottom-0 after:border-b after:border-slate-200/80">
+                    <th className="px-4 py-3 text-left w-[45%]">테스트 케이스</th>
+                    {selectedHeaders.map(h => (
+                       <th key={h} className="px-5 py-3 text-left whitespace-nowrap">{h}</th>
+                    ))}
+                    <th className="px-4 py-3 text-left w-[140px]">결과 입력</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100/80 relative z-0">
+                  {filteredCases.map((c, idx) => {
+                    const status = run.results[c.id].status;
+                    const isSelected = selectedCaseId === c.id;
                     
-                    <div className="flex items-start justify-between gap-4 cursor-pointer" onClick={() => { setSelectedCaseId(c.id); if(!isDetailOpen) setIsDetailOpen(true); }}>
-                      <div className="flex items-start gap-3 flex-1 min-w-0 mt-0.5">
-                        <div className="mt-0.5 shrink-0">{icon}</div>
-                        <p className={`text-[13px] tracking-tight truncate ${isSelected ? 'text-zinc-900 font-black' : 'text-slate-800 font-bold'}`}>{c.title}</p>
-                      </div>
-                      
-                      <div className="flex gap-1.5 shrink-0 bg-white/80 backdrop-blur-sm rounded-lg border border-slate-200/80 p-1 shadow-sm" onClick={(e) => e.stopPropagation()}>
-                         <button onClick={(e) => { e.stopPropagation(); handleInlineResultUpdate(c.id, 'pass'); }} title="PASS" className={`p-1.5 rounded-md transition-all ${status === 'pass' ? 'bg-gradient-to-b from-emerald-400 to-emerald-500 text-white shadow-md border-emerald-400' : 'text-slate-400 hover:bg-emerald-50 hover:text-emerald-500'}`}>
-                           <CheckCircle size={14}/>
-                         </button>
-                         <button onClick={(e) => { e.stopPropagation(); handleInlineResultUpdate(c.id, 'fail'); }} title="FAIL" className={`p-1.5 rounded-md transition-all ${status === 'fail' ? 'bg-gradient-to-b from-rose-400 to-rose-500 text-white shadow-md border-rose-400' : 'text-slate-400 hover:bg-rose-50 hover:text-rose-500'}`}>
-                           <XCircle size={14}/>
-                         </button>
-                         <button onClick={(e) => { e.stopPropagation(); handleInlineResultUpdate(c.id, 'block'); }} title="BLOCK" className={`p-1.5 rounded-md transition-all ${status === 'block' ? 'bg-gradient-to-b from-amber-400 to-amber-500 text-white shadow-md border-amber-400' : 'text-slate-400 hover:bg-amber-50 hover:text-amber-500'}`}>
-                           <AlertTriangle size={14}/>
-                         </button>
-                      </div>
-                    </div>
+                    let icon = <div className="w-3.5 h-3.5 rounded-full border-2 border-slate-300"></div>;
+                    if (status === 'pass') icon = <CheckCircle size={16} className="text-emerald-500"/>;
+                    if (status === 'fail') icon = <XCircle size={16} className="text-rose-500"/>;
+                    if (status === 'block') icon = <AlertTriangle size={16} className="text-amber-500"/>;
 
-                    {selectedHeaders.length > 0 && (
-                        <div className="pl-6 flex flex-wrap gap-3 cursor-pointer" onClick={() => { setSelectedCaseId(c.id); if(!isDetailOpen) setIsDetailOpen(true); }}>
-                          {selectedHeaders.map(h => {
-                            const val = c.fields?.[h];
-                            if(!val || val === c.title) return null;
-                            return (
-                                <div key={h} className="flex-1 min-w-[200px] bg-white border border-slate-200/60 rounded-xl p-3 shadow-sm hover:shadow-md transition-shadow">
-                                  <div className="font-black text-[10px] text-zinc-500 mb-1.5 uppercase tracking-wider">{h}</div>
-                                  <div className="text-[12px] font-medium text-slate-700 whitespace-pre-wrap leading-relaxed">{val}</div>
-                                </div>
-                            )
-                          })}
-                        </div>
-                    )}
-                  </div>
-                );
-              })}
-              {filteredCases.length === 0 && <p className="text-center text-slate-400 text-[13px] font-bold mt-10">해당하는 케이스가 없습니다.</p>}
+                    return (
+                      <tr key={c.id} 
+                          onClick={() => { setSelectedCaseId(c.id); if(!isDetailOpen) setIsDetailOpen(true); }}
+                          className={`transition-all duration-300 cursor-pointer group/row ${isSelected ? 'bg-zinc-50/80' : 'hover:bg-slate-50/60'}`}>
+                        
+                        <td className={`px-4 py-3.5 border-l-4 transition-colors ${isSelected ? 'border-l-zinc-700' : 'border-l-transparent'}`}
+                            onMouseEnter={(e) => {
+                                if (c.title && c.title.length > 15) {
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    setTooltipInfo({
+                                        text: c.title,
+                                        x: rect.left + rect.width / 2,
+                                        y: rect.top - 10
+                                    });
+                                }
+                            }}
+                            onMouseLeave={() => setTooltipInfo(null)}
+                        >
+                          <div className="flex items-start gap-3 w-full overflow-hidden mt-0.5">
+                            <div className="mt-0.5 shrink-0">{icon}</div>
+                            <p className={`text-[13px] tracking-tight truncate ${isSelected ? 'text-zinc-900 font-black' : 'text-slate-800 font-bold'}`}>{c.title}</p>
+                          </div>
+                        </td>
+
+                        {selectedHeaders.map(h => {
+                           const val = c.fields?.[h];
+                           const displayVal = (!val || val === c.title) ? '-' : val;
+                           return (
+                              <td key={h} className="px-5 py-3.5 text-[13px] font-medium text-slate-700 max-w-[250px]"
+                                  onMouseEnter={(e) => {
+                                      if (displayVal !== '-' && displayVal.length > 15) {
+                                          const rect = e.currentTarget.getBoundingClientRect();
+                                          setTooltipInfo({
+                                              text: displayVal,
+                                              x: rect.left + rect.width / 2,
+                                              y: rect.top - 10
+                                          });
+                                      }
+                                  }}
+                                  onMouseLeave={() => setTooltipInfo(null)}
+                              >
+                                 <div className="truncate w-full">{displayVal}</div>
+                              </td>
+                           );
+                        })}
+
+                        <td className="px-4 py-3.5 text-left w-[140px]">
+                          <div className="inline-flex gap-1.5 shrink-0 bg-white/80 backdrop-blur-sm rounded-lg border border-slate-200/80 p-1 shadow-sm" onClick={(e) => e.stopPropagation()}>
+                             <button onClick={(e) => { e.stopPropagation(); handleInlineResultUpdate(c.id, 'pass'); }} title="PASS" className={`p-1.5 rounded-md transition-all ${status === 'pass' ? 'bg-gradient-to-b from-emerald-400 to-emerald-500 text-white shadow-md border-emerald-400' : 'text-slate-400 hover:bg-emerald-50 hover:text-emerald-500'}`}>
+                               <CheckCircle size={14}/>
+                             </button>
+                             <button onClick={(e) => { e.stopPropagation(); handleInlineResultUpdate(c.id, 'fail'); }} title="FAIL" className={`p-1.5 rounded-md transition-all ${status === 'fail' ? 'bg-gradient-to-b from-rose-400 to-rose-500 text-white shadow-md border-rose-400' : 'text-slate-400 hover:bg-rose-50 hover:text-rose-500'}`}>
+                               <XCircle size={14}/>
+                             </button>
+                             <button onClick={(e) => { e.stopPropagation(); handleInlineResultUpdate(c.id, 'block'); }} title="BLOCK" className={`p-1.5 rounded-md transition-all ${status === 'block' ? 'bg-gradient-to-b from-amber-400 to-amber-500 text-white shadow-md border-amber-400' : 'text-slate-400 hover:bg-amber-50 hover:text-amber-500'}`}>
+                               <AlertTriangle size={14}/>
+                             </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {filteredCases.length === 0 && <tr><td colSpan={selectedHeaders.length + 2} className="p-10 text-center text-slate-400 text-[13px] font-bold">해당하는 케이스가 없습니다.</td></tr>}
+                </tbody>
+              </table>
             </div>
           </div>
 
@@ -2209,6 +2244,15 @@ ${JSON.stringify(simplifiedData)}
             </div>
           )}
         </div>
+
+      {tooltipInfo && typeof document !== 'undefined' && createPortal(
+          <div style={{ top: tooltipInfo.y, left: tooltipInfo.x, transform: 'translate(-50%, -100%)' }} 
+               className="fixed z-[9999] w-max max-w-[320px] bg-zinc-800 text-white text-[12px] font-medium p-3.5 rounded-xl shadow-[0_10px_30px_rgb(0,0,0,0.2)] whitespace-pre-wrap break-words leading-relaxed pointer-events-none before:content-[''] before:absolute before:top-full before:left-1/2 before:-translate-x-1/2 before:border-4 before:border-transparent before:border-t-zinc-800 animate-in fade-in zoom-in-95 duration-100">
+              <div className="flex items-center gap-1.5 mb-2 text-emerald-400 font-bold border-b border-zinc-700 pb-1.5"><Search size={12}/> 전체 내용</div>
+              {tooltipInfo.text}
+          </div>,
+          document.body
+      )}
       </>
     )});
   }
