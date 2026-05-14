@@ -2068,11 +2068,11 @@ ${JSON.stringify(simplifiedData)}
               <table className="w-full text-left border-collapse relative z-0">
                 <thead className="sticky top-0 z-10 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
                   <tr className="bg-slate-50/95 backdrop-blur-xl text-[11px] font-bold text-slate-500 uppercase tracking-wider relative after:absolute after:inset-x-0 after:bottom-0 after:border-b after:border-slate-200/80">
-                    <th className="px-4 py-3 text-left w-[45%]">테스트 케이스</th>
+                    <th className="px-4 py-3 text-left">테스트 케이스</th>
                     {selectedHeaders.map(h => (
                        <th key={h} className="px-5 py-3 text-left whitespace-nowrap">{h}</th>
                     ))}
-                    <th className="px-4 py-3 text-left w-[140px]">결과 입력</th>
+                    <th className="px-4 py-3 text-left w-[180px]">결과 입력</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100/80 relative z-0">
@@ -2090,7 +2090,7 @@ ${JSON.stringify(simplifiedData)}
                           onClick={() => { setSelectedCaseId(c.id); if(!isDetailOpen) setIsDetailOpen(true); }}
                           className={`transition-all duration-300 cursor-pointer group/row ${isSelected ? 'bg-zinc-50/80' : 'hover:bg-slate-50/60'}`}>
                         
-                        <td className={`px-4 py-3.5 border-l-4 transition-colors ${isSelected ? 'border-l-zinc-700' : 'border-l-transparent'}`}
+                        <td className={`px-4 py-3.5 border-l-4 transition-colors max-w-[300px] ${isSelected ? 'border-l-zinc-700' : 'border-l-transparent'}`}
                             onMouseEnter={(e) => {
                                 if (c.title && c.title.length > 15) {
                                     const rect = e.currentTarget.getBoundingClientRect();
@@ -2131,16 +2131,16 @@ ${JSON.stringify(simplifiedData)}
                            );
                         })}
 
-                        <td className="px-4 py-3.5 text-left w-[140px]">
+                        <td className="px-4 py-3.5 text-left w-[180px]">
                           <div className="inline-flex gap-1.5 shrink-0 bg-white/80 backdrop-blur-sm rounded-lg border border-slate-200/80 p-1 shadow-sm" onClick={(e) => e.stopPropagation()}>
-                             <button onClick={(e) => { e.stopPropagation(); handleInlineResultUpdate(c.id, 'pass'); }} title="PASS" className={`p-1.5 rounded-md transition-all ${status === 'pass' ? 'bg-gradient-to-b from-emerald-400 to-emerald-500 text-white shadow-md border-emerald-400' : 'text-slate-400 hover:bg-emerald-50 hover:text-emerald-500'}`}>
-                               <CheckCircle size={14}/>
+                             <button onClick={(e) => { e.stopPropagation(); handleInlineResultUpdate(c.id, 'pass'); }} className={`px-2.5 py-1.5 rounded-md text-[10px] font-black tracking-widest transition-all ${status === 'pass' ? 'bg-gradient-to-b from-emerald-400 to-emerald-500 text-white shadow-md border-emerald-400' : 'text-slate-400 hover:bg-emerald-50 hover:text-emerald-500'}`}>
+                               PASS
                              </button>
-                             <button onClick={(e) => { e.stopPropagation(); handleInlineResultUpdate(c.id, 'fail'); }} title="FAIL" className={`p-1.5 rounded-md transition-all ${status === 'fail' ? 'bg-gradient-to-b from-rose-400 to-rose-500 text-white shadow-md border-rose-400' : 'text-slate-400 hover:bg-rose-50 hover:text-rose-500'}`}>
-                               <XCircle size={14}/>
+                             <button onClick={(e) => { e.stopPropagation(); handleInlineResultUpdate(c.id, 'fail'); }} className={`px-2.5 py-1.5 rounded-md text-[10px] font-black tracking-widest transition-all ${status === 'fail' ? 'bg-gradient-to-b from-rose-400 to-rose-500 text-white shadow-md border-rose-400' : 'text-slate-400 hover:bg-rose-50 hover:text-rose-500'}`}>
+                               FAIL
                              </button>
-                             <button onClick={(e) => { e.stopPropagation(); handleInlineResultUpdate(c.id, 'block'); }} title="BLOCK" className={`p-1.5 rounded-md transition-all ${status === 'block' ? 'bg-gradient-to-b from-amber-400 to-amber-500 text-white shadow-md border-amber-400' : 'text-slate-400 hover:bg-amber-50 hover:text-amber-500'}`}>
-                               <AlertTriangle size={14}/>
+                             <button onClick={(e) => { e.stopPropagation(); handleInlineResultUpdate(c.id, 'block'); }} className={`px-2.5 py-1.5 rounded-md text-[10px] font-black tracking-widest transition-all ${status === 'block' ? 'bg-gradient-to-b from-amber-400 to-amber-500 text-white shadow-md border-amber-400' : 'text-slate-400 hover:bg-amber-50 hover:text-amber-500'}`}>
+                               BLOCK
                              </button>
                           </div>
                         </td>
