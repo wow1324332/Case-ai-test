@@ -1360,18 +1360,29 @@ export default function QAApp() {
         setSelectedCaseIdsForDelete([]);
     };
 
-    const handleDropCase = (e, targetIndex) => {
+    const handleDropCase = (e, targetIndex, dropType = 'swap') => {
         e.preventDefault();
-        if (draggedCaseIndex === null || draggedCaseIndex === targetIndex) return;
+        if (draggedCaseIndex === null) return;
+        if (dropType === 'swap' && draggedCaseIndex === targetIndex) return;
 
         setData(prev => {
             const allCases = [...prev.cases];
             const suiteCases = allCases.filter(c => c.suiteId === activeSuiteId);
             const otherCases = allCases.filter(c => c.suiteId !== activeSuiteId);
             
-            const draggedCase = suiteCases[draggedCaseIndex];
-            suiteCases.splice(draggedCaseIndex, 1);
-            suiteCases.splice(targetIndex, 0, draggedCase);
+            if (dropType === 'swap') {
+                const temp = suiteCases[draggedCaseIndex];
+                suiteCases[draggedCaseIndex] = suiteCases[targetIndex];
+                suiteCases[targetIndex] = temp;
+            } else if (dropType === 'insert') {
+                const draggedCase = suiteCases[draggedCaseIndex];
+                suiteCases.splice(draggedCaseIndex, 1);
+                let finalIndex = targetIndex;
+                if (draggedCaseIndex < targetIndex) {
+                    finalIndex--;
+                }
+                suiteCases.splice(finalIndex, 0, draggedCase);
+            }
             
             return { ...prev, cases: [...otherCases, ...suiteCases] };
         });
@@ -1403,12 +1414,12 @@ export default function QAApp() {
                  </button>
                  {isHeaderDropdownOpen && (
                     <div className="absolute top-full mt-2 right-0 z-50 bg-white/90 backdrop-blur-xl border border-slate-200/80 shadow-[0_10px_40px_rgb(0,0,0,0.1)] rounded-xl p-3 w-56 max-h-56 overflow-y-auto">
-                       <p className="text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-wider ml-1">목록에서 숨길 항목</p>
+                       <p className="text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-wider ml-1">목록 표시 항목</p>
                        {suite?.headers?.map(h => (
                           <label key={h} className="flex items-center gap-2.5 py-1.5 px-1 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors">
-                             <input type="checkbox" checked={hiddenCols.includes(h)} onChange={(e) => {
-                                 if (e.target.checked) setHiddenCols([...hiddenCols, h]);
-                                 else setHiddenCols(hiddenCols.filter(sh => sh !== h));
+                             <input type="checkbox" checked={!hiddenCols.includes(h)} onChange={(e) => {
+                                 if (e.target.checked) setHiddenCols(hiddenCols.filter(sh => sh !== h));
+                                 else setHiddenCols([...hiddenCols, h]);
                              }} className="w-3.5 h-3.5 text-zinc-600 rounded border-slate-300 focus:ring-zinc-600/20" />
                              <span className="text-[12px] font-bold text-slate-700 truncate">{h}</span>
                           </label>
@@ -1487,9 +1498,15 @@ export default function QAApp() {
                 )}
                 {cases.map((c, i) => (
                   <React.Fragment key={c.id}>
-                    <tr className="group/add">
+                    <tr className="group/add"
+                        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                        onDrop={(e) => handleDropCase(e, i, 'insert')}
+                    >
                       <td colSpan={suite?.headers ? suite.headers.filter(h => !hiddenCols.includes(h)).length + 3 : 5} className="p-0 h-0 relative">
-                        <div className="absolute inset-x-0 -top-1.5 h-3 z-30 opacity-0 group-hover/add:opacity-100 flex items-center justify-center cursor-pointer" onClick={() => handleInsertCaseRow(i)}>
+                        <div className="absolute inset-x-0 -top-1.5 h-3 z-30 opacity-0 group-hover/add:opacity-100 flex items-center justify-center cursor-pointer" 
+                             onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'move'; }}
+                             onDrop={(e) => { e.stopPropagation(); handleDropCase(e, i, 'insert'); }}
+                             onClick={() => handleInsertCaseRow(i)}>
                           <div className="w-full h-0.5 bg-emerald-400"></div>
                           <div className="absolute w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center text-white shadow-md shadow-emerald-500/30 hover:scale-110 transition-transform"><Plus size={12} strokeWidth={4}/></div>
                         </div>
@@ -1502,8 +1519,7 @@ export default function QAApp() {
                             if(!isSelectionMode) { e.dataTransfer.effectAllowed = 'move'; setDraggedCaseIndex(i); } 
                         }}
                         onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
-                        onDrop={(e) => handleDropCase(e, i)}
-                        onDragEnd={() => setDraggedCaseIndex(null)}
+                        onDrop={(e) => handleDropCase(e, i, 'swap')}
                         onMouseDown={() => handleTouchStart(c.id)}
                         onMouseMove={handleTouchMove}
                         onMouseUp={handleTouchEnd}
@@ -1570,9 +1586,15 @@ export default function QAApp() {
                   </React.Fragment>
                 ))}
                 {cases.length > 0 && (
-                   <tr className="group/add">
+                   <tr className="group/add"
+                       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                       onDrop={(e) => handleDropCase(e, cases.length, 'insert')}
+                   >
                      <td colSpan={suite?.headers ? suite.headers.filter(h => !hiddenCols.includes(h)).length + 3 : 5} className="p-0 h-0 relative">
-                       <div className="absolute inset-x-0 -top-1.5 h-3 z-30 opacity-0 group-hover/add:opacity-100 flex items-center justify-center cursor-pointer" onClick={() => handleInsertCaseRow(cases.length)}>
+                       <div className="absolute inset-x-0 -top-1.5 h-3 z-30 opacity-0 group-hover/add:opacity-100 flex items-center justify-center cursor-pointer" 
+                            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'move'; }}
+                            onDrop={(e) => { e.stopPropagation(); handleDropCase(e, cases.length, 'insert'); }}
+                            onClick={() => handleInsertCaseRow(cases.length)}>
                          <div className="w-full h-0.5 bg-emerald-400"></div>
                          <div className="absolute w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center text-white shadow-md shadow-emerald-500/30 hover:scale-110 transition-transform"><Plus size={12} strokeWidth={4}/></div>
                        </div>
