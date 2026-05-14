@@ -95,6 +95,11 @@ export default function QAApp() {
   const [selectedHeaders, setSelectedHeaders] = useState([]); 
   const [isHeaderDropdownOpen, setIsHeaderDropdownOpen] = useState(false);
   const [draggedHeader, setDraggedHeader] = useState(null);
+  const [editingHeader, setEditingHeader] = useState(null);
+  const [editingHeaderValue, setEditingHeaderValue] = useState("");
+
+  const [isRunSettingsOpen, setIsRunSettingsOpen] = useState(false);
+  const [editRunName, setEditRunName] = useState('');
 
   const [toastMessage, setToastMessage] = useState(null);
 
@@ -261,9 +266,11 @@ export default function QAApp() {
     setSuiteNameInput('');
     setIsProjectSettingsOpen(false);
     setIsSuiteSettingsOpen(false);
+    setIsRunSettingsOpen(false);
     setIsHeaderDropdownOpen(false);
     setIsSelectionMode(false);
     setSelectedCaseIdsForDelete([]);
+    setEditingHeader(null);
   }, [currentView]);
 
   const globalStyles = `
@@ -1301,11 +1308,39 @@ export default function QAApp() {
         const newCase = { id: newCaseId, suiteId: activeSuiteId, title: "새로운 테스트 케이스", priority: "Medium", fields: emptyFields };
         
         setData(prev => {
-           const newCases = [...prev.cases];
-           newCases.splice(index, 0, newCase);
-           return { ...prev, cases: newCases };
+           const suiteCases = prev.cases.filter(c => c.suiteId === activeSuiteId);
+           const otherCases = prev.cases.filter(c => c.suiteId !== activeSuiteId);
+           suiteCases.splice(index, 0, newCase);
+           return { ...prev, cases: [...otherCases, ...suiteCases] };
         });
         setToastMessage('새로운 케이스가 삽입되었습니다.');
+    };
+
+    const saveEditingHeaderLocal = (oldHeader, newHeader) => {
+        if (!newHeader.trim() || oldHeader === newHeader) { setEditingHeader(null); return; }
+        setData(prev => {
+            const newSuites = prev.suites.map(s => {
+                if (s.id === activeSuiteId) {
+                    const newHeaders = s.headers.map(h => h === oldHeader ? newHeader.trim() : h);
+                    return { ...s, headers: newHeaders };
+                }
+                return s;
+            });
+            const newCases = prev.cases.map(c => {
+                if (c.suiteId === activeSuiteId && c.fields[oldHeader] !== undefined) {
+                    const newFields = { ...c.fields };
+                    newFields[newHeader.trim()] = newFields[oldHeader];
+                    delete newFields[oldHeader];
+                    return { ...c, fields: newFields };
+                }
+                return c;
+            });
+            return { ...prev, suites: newSuites, cases: newCases };
+        });
+        setEditingHeader(null);
+        if (hiddenCols.includes(oldHeader)) {
+            setHiddenCols(prev => [...prev.filter(h => h !== oldHeader), newHeader.trim()]);
+        }
     };
 
     const handleTouchStart = (caseId) => {
@@ -1481,12 +1516,23 @@ export default function QAApp() {
                             setDraggedHeader(null);
                         }}
                         onDragEnd={() => setDraggedHeader(null)}
-                        className={`px-5 py-4 whitespace-nowrap cursor-grab active:cursor-grabbing transition-colors ${draggedHeader === header ? 'opacity-50 bg-slate-200' : 'hover:bg-slate-100/50'}`}
+                        onDoubleClick={() => { setEditingHeader(header); setEditingHeaderValue(header); }}
+                        className={`px-5 py-4 whitespace-nowrap cursor-grab active:cursor-grabbing transition-colors relative ${draggedHeader === header ? 'opacity-50 bg-slate-200' : 'hover:bg-slate-100/50'}`}
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="text-slate-300"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></span>
-                        {header}
-                      </div>
+                      {editingHeader === header ? (
+                          <input
+                             autoFocus
+                             defaultValue={editingHeaderValue}
+                             onBlur={(e) => saveEditingHeaderLocal(header, e.target.value)}
+                             onKeyDown={(e) => { if(e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+                             className="absolute inset-x-2 top-2 z-50 text-[11px] font-bold p-1.5 border-2 border-emerald-400 rounded-lg outline-none shadow-md bg-white text-slate-800"
+                          />
+                      ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-300"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></span>
+                            {header}
+                          </div>
+                      )}
                     </th>
                   ))}
                   <th className="px-3 py-4 w-16 text-center rounded-tr-2xl"></th>
@@ -1637,14 +1683,26 @@ export default function QAApp() {
       const runName = e.target.runName.value;
       if (selectedRunCases.length === 0) { setToastMessage('최소 1개 이상의 테스트 케이스를 선택해주세요.'); return; }
       
-      const runCases = data.cases.filter(c => selectedRunCases.includes(c.id));
-      const initialResults = {};
-      runCases.forEach(c => { initialResults[c.id] = { status: 'untested', note: '' }; });
+      const runCasesSnapshot = data.cases.filter(c => selectedRunCases.includes(c.id)).map(c => JSON.parse(JSON.stringify(c)));
+      const suiteIds = [...new Set(runCasesSnapshot.map(c => c.suiteId))];
+      const headersSnapshot = Array.from(new Set(suiteIds.flatMap(id => data.suites.find(s => s.id === id)?.headers || [])));
 
-      const newRun = { id: generateId(), projectId: activeProjectId, name: runName, status: 'active', results: initialResults, createdAt: new Date().toISOString() };
+      const initialResults = {};
+      runCasesSnapshot.forEach(c => { initialResults[c.id] = { status: 'untested', note: '' }; });
+
+      const newRun = { 
+        id: generateId(), 
+        projectId: activeProjectId, 
+        name: runName, 
+        status: 'active', 
+        results: initialResults, 
+        createdAt: new Date().toISOString(),
+        runCases: runCasesSnapshot,
+        runHeaders: headersSnapshot
+      };
       setData(prev => ({ ...prev, runs: [...prev.runs, newRun] }));
       setActiveRunId(newRun.id);
-      if (runCases.length > 0) setSelectedCaseId(runCases[0].id); else setSelectedCaseId(null);
+      if (runCasesSnapshot.length > 0) setSelectedCaseId(runCasesSnapshot[0].id); else setSelectedCaseId(null);
       setCurrentView('execute_run');
     };
 
@@ -1730,11 +1788,11 @@ export default function QAApp() {
     if (!run) return Layout({ title: "Not Found", children: <p>Run Not Found</p> });
 
     const caseIdsInRun = Object.keys(run.results || {});
-    const runCases = data.cases.filter(c => caseIdsInRun.includes(c.id));
+    const runCases = run.runCases || data.cases.filter(c => caseIdsInRun.includes(c.id));
     const selectedCase = runCases.find(c => c.id === selectedCaseId);
     const selectedResult = selectedCaseId ? run.results[selectedCaseId] : null;
 
-    const runHeaders = Array.from(new Set(runCases.flatMap(c => { const suite = data.suites.find(s => s.id === c.suiteId); return suite?.headers || []; })));
+    const runHeaders = run.runHeaders || Array.from(new Set(runCases.flatMap(c => { const suite = data.suites.find(s => s.id === c.suiteId); return suite?.headers || []; })));
 
     const handleResultUpdate = (status) => {
       if(!selectedCaseId) return;
@@ -1774,6 +1832,21 @@ export default function QAApp() {
       setToastMessage('테스트 런이 완료되었습니다.');
     };
 
+    const handleUpdateRun = (e) => {
+        e.preventDefault();
+        const newName = e.target.renameRun.value;
+        setData(prev => ({ ...prev, runs: prev.runs.map(r => r.id === activeRunId ? { ...r, name: newName } : r) }));
+        setIsRunSettingsOpen(false);
+        setToastMessage('테스트 런 이름이 수정되었습니다.');
+    };
+
+    const handleDeleteRun = () => {
+        setData(prev => ({ ...prev, runs: prev.runs.filter(r => r.id !== activeRunId) }));
+        setToastMessage('테스트 런이 삭제되었습니다.');
+        setIsRunSettingsOpen(false);
+        setCurrentView('project');
+    };
+
     const filteredCases = runCases.filter(c => filter === 'all' || run.results[c.id].status === filter);
     const total = caseIdsInRun.length;
     const pCount = Object.values(run.results).filter(r => r.status === 'pass').length;
@@ -1783,18 +1856,38 @@ export default function QAApp() {
 
     return Layout({ title: `실행: ${run.name}`, children: (
       <>
-        <div className="mb-4 flex justify-between items-center">
+        <div className="mb-4 flex justify-between items-center relative z-20">
           <button onClick={() => setCurrentView('project')} className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1.5 font-bold bg-white/60 backdrop-blur-md px-3 py-2 rounded-lg border border-slate-200/60 shadow-sm transition-all hover:bg-white hover:shadow-md">
             <ChevronRight className="rotate-180" size={16}/> 프로젝트로 돌아가기
           </button>
-          {run.status === 'active' ? (
-            <button onClick={handleCompleteRun} className="px-4 py-2 bg-gradient-to-b from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-lg text-xs font-bold shadow-[0_4px_14px_0_rgb(16,185,129,0.39)] border border-emerald-500/50 transition-all flex items-center gap-1.5">
-              <CheckCircle size={14}/> 런 완료
-            </button>
-          ) : (
-            <span className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100/80 text-slate-500 border border-slate-200/80 shadow-inner">완료된 런</span>
-          )}
+          <div className="flex items-center gap-3">
+             <button onClick={() => { setEditRunName(run.name); setIsRunSettingsOpen(true); }} className="text-slate-400 hover:text-zinc-600 hover:bg-zinc-100 p-1.5 rounded-lg transition-all">
+                <Settings size={18} />
+             </button>
+             {run.status === 'active' ? (
+                <button onClick={handleCompleteRun} className="px-4 py-2 bg-gradient-to-b from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-lg text-xs font-bold shadow-[0_4px_14px_0_rgb(16,185,129,0.39)] border border-emerald-500/50 transition-all flex items-center gap-1.5">
+                  <CheckCircle size={14}/> 런 완료
+                </button>
+              ) : (
+                <span className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100/80 text-slate-500 border border-slate-200/80 shadow-inner">완료된 런</span>
+              )}
+          </div>
         </div>
+
+        {isRunSettingsOpen && (
+            <div className="mb-5 p-5 bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300 relative z-20">
+                <h3 className="text-[13px] font-bold text-slate-800 mb-4 flex items-center gap-1.5"><Settings size={14}/> 테스트 런 설정</h3>
+                <form onSubmit={handleUpdateRun} className="flex items-end gap-3">
+                    <div className="flex-1">
+                        <label className="block text-[11px] font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">Rename Test Run</label>
+                        <input name="renameRun" defaultValue={editRunName} required className="w-full bg-white/50 backdrop-blur-sm border border-slate-200/80 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/10 transition-all shadow-inner" />
+                    </div>
+                    <button type="submit" className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-[0_4px_14px_0_rgba(16,185,129,0.39)] transition-all">저장</button>
+                    <button type="button" onClick={handleDeleteRun} className="px-4 py-2.5 border border-rose-200/80 text-rose-600 bg-rose-50/50 hover:bg-rose-100 rounded-xl text-xs font-bold transition-all shadow-sm">삭제</button>
+                    <button type="button" onClick={() => setIsRunSettingsOpen(false)} className="px-4 py-2.5 text-slate-500 hover:bg-slate-100 rounded-xl text-xs font-bold transition-all">취소</button>
+                </form>
+            </div>
+        )}
 
         <div className="bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-2xl p-5 mb-5 flex flex-col gap-3">
            <div className="flex justify-between items-center">
@@ -1970,9 +2063,9 @@ export default function QAApp() {
 
                   <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-slate-50/30">
                     {(() => {
-                      const caseSuite = data.suites.find(s => s.id === selectedCase.suiteId);
-                      if (caseSuite?.headers && selectedCase.fields) {
-                        return caseSuite.headers.map((header, idx) => {
+                      const displayHeaders = run.runHeaders || data.suites.find(s => s.id === selectedCase.suiteId)?.headers;
+                      if (displayHeaders && selectedCase.fields) {
+                        return displayHeaders.map((header, idx) => {
                           const val = selectedCase.fields[header];
                           if (!val || val === selectedCase.title) return null; 
                           return (
