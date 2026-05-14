@@ -153,6 +153,9 @@ export default function QAApp() {
   const [selectedCaseIdsForDelete, setSelectedCaseIdsForDelete] = useState([]);
   const longPressTimerRef = useRef(null);
   const justLongPressedRef = useRef(false);
+  const [expandedIssueRow, setExpandedIssueRow] = useState({});
+  const [editingIssues, setEditingIssues] = useState({});
+  const [issueToDelete, setIssueToDelete] = useState(null);
 
   useEffect(() => {
     const fadeTimer = setTimeout(() => setIsSplashFading(true), 2000); 
@@ -606,6 +609,27 @@ export default function QAApp() {
     }
   };
 
+  const handleDeleteIssue = (caseId, issueId) => {
+      setData(prev => {
+          const newRuns = prev.runs.map(r => {
+              if (r.id === activeRunId) {
+                  if (r.status === 'completed') return r;
+                  const currentIssues = r.results[caseId]?.issues || [];
+                  const updatedIssues = currentIssues.filter(iss => iss.id !== issueId);
+                  return {
+                      ...r,
+                      results: {
+                          ...r.results,
+                          [caseId]: { ...r.results[caseId], issues: updatedIssues }
+                      }
+                  };
+              }
+              return r;
+          });
+          return { ...prev, runs: newRuns };
+      });
+  };
+
   const Layout = ({ children, title }) => (
     <div className="flex h-screen bg-[#f8fafc] bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-50/40 via-[#f8fafc] to-slate-100 text-slate-800 font-sans overflow-hidden selection:bg-blue-200/50">
       <style>{globalStyles}</style>
@@ -807,6 +831,23 @@ export default function QAApp() {
                         setToastMessage('테스트 런이 완료되었습니다.');
                         setIsCompleteRunConfirmOpen(false);
                       }} className="px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-500 text-white shadow-md hover:bg-emerald-600 transition-colors">완료하기</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {issueToDelete && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-900/60 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
+              <div className="bg-white rounded-2xl p-6 w-[320px] shadow-2xl border border-white/20">
+                  <h3 className="text-[15px] font-black text-zinc-900 mb-2">이슈 삭제</h3>
+                  <p className="text-xs text-zinc-500 font-medium mb-6">해당 이슈를 정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.</p>
+                  <div className="flex justify-end gap-2.5">
+                      <button onClick={() => setIssueToDelete(null)} className="px-4 py-2.5 rounded-xl text-xs font-bold text-zinc-500 hover:bg-zinc-100 transition-colors">취소</button>
+                      <button onClick={() => {
+                          handleDeleteIssue(issueToDelete.caseId, issueToDelete.issueId);
+                          setIssueToDelete(null);
+                          setToastMessage('이슈가 삭제되었습니다.');
+                      }} className="px-4 py-2.5 rounded-xl text-xs font-bold bg-rose-500 text-white shadow-md hover:bg-rose-600 transition-colors">삭제</button>
                   </div>
               </div>
           </div>
@@ -1955,9 +1996,12 @@ ${JSON.stringify(simplifiedData)}
       if (run.status === 'completed') return;
       if(!selectedCaseId) return;
       setData(prev => {
-        const newRuns = prev.runs.map(r => r.id === activeRunId ? { ...r, results: { ...r.results, [selectedCaseId]: { ...r.results[selectedCaseId], status } } } : r);
+        const newRuns = prev.runs.map(r => r.id === activeRunId ? { ...r, results: { ...r.results, [selectedCaseId]: { ...r.results[selectedCaseId], status, issues: r.results[selectedCaseId].issues || [] } } } : r);
         return { ...prev, runs: newRuns };
       });
+      if (status === 'fail') {
+         setExpandedIssueRow(prev => ({ ...prev, [selectedCaseId]: true }));
+      }
       if (status !== 'untested') {
          const nextUntested = runCases.find(c => c.id !== selectedCaseId && run.results[c.id].status === 'untested');
          if (nextUntested) setSelectedCaseId(nextUntested.id);
@@ -1977,10 +2021,57 @@ ${JSON.stringify(simplifiedData)}
     const handleInlineResultUpdate = (caseId, status) => {
       if (run.status === 'completed') return;
       setData(prev => {
-        const newRuns = prev.runs.map(r => r.id === activeRunId ? { ...r, results: { ...r.results, [caseId]: { ...r.results[caseId], status } } } : r);
+        const newRuns = prev.runs.map(r => r.id === activeRunId ? { ...r, results: { ...r.results, [caseId]: { ...r.results[caseId], status, issues: r.results[caseId].issues || [] } } } : r);
         return { ...prev, runs: newRuns };
       });
       setSelectedCaseId(caseId);
+      if (status === 'fail') {
+         setExpandedIssueRow(prev => ({ ...prev, [caseId]: true }));
+      }
+    };
+
+    const handleAddIssue = (caseId) => {
+        if (run.status === 'completed') return;
+        const newIssueId = generateId();
+        setData(prev => {
+            const newRuns = prev.runs.map(r => {
+                if (r.id === activeRunId) {
+                    const currentIssues = r.results[caseId]?.issues || [];
+                    const newIssue = { id: newIssueId, text: '' };
+                    return {
+                        ...r,
+                        results: {
+                            ...r.results,
+                            [caseId]: { ...r.results[caseId], issues: [...currentIssues, newIssue] }
+                        }
+                    };
+                }
+                return r;
+            });
+            return { ...prev, runs: newRuns };
+        });
+        setEditingIssues(prev => ({ ...prev, [newIssueId]: true }));
+    };
+
+    const handleUpdateIssue = (caseId, issueId, text) => {
+        if (run.status === 'completed') return;
+        setData(prev => {
+            const newRuns = prev.runs.map(r => {
+                if (r.id === activeRunId) {
+                    const currentIssues = r.results[caseId]?.issues || [];
+                    const updatedIssues = currentIssues.map(iss => iss.id === issueId ? { ...iss, text } : iss);
+                    return {
+                        ...r,
+                        results: {
+                            ...r.results,
+                            [caseId]: { ...r.results[caseId], issues: updatedIssues }
+                        }
+                    };
+                }
+                return r;
+            });
+            return { ...prev, runs: newRuns };
+        });
     };
 
     const handleCompleteRun = () => {
@@ -2139,7 +2230,8 @@ ${JSON.stringify(simplifiedData)}
                     if (status === 'block') icon = <AlertTriangle size={16} className="text-amber-500"/>;
 
                     return (
-                      <tr key={c.id} 
+                      <React.Fragment key={c.id}>
+                      <tr 
                           onClick={() => { setSelectedCaseId(c.id); if(!isDetailOpen) setIsDetailOpen(true); }}
                           className={`transition-all duration-300 cursor-pointer group/row ${isSelected ? 'bg-zinc-50/80' : 'hover:bg-slate-50/60'}`}>
                         
@@ -2158,7 +2250,15 @@ ${JSON.stringify(simplifiedData)}
                         >
                           <div className="flex items-start gap-3 w-full overflow-hidden mt-0.5">
                             <div className="mt-0.5 shrink-0">{icon}</div>
-                            <p className={`text-[13px] tracking-tight truncate ${isSelected ? 'text-zinc-900 font-black' : 'text-slate-800 font-bold'}`}>{c.title}</p>
+                            <div className="flex flex-col gap-1.5 w-full min-w-0">
+                                <p className={`text-[13px] tracking-tight truncate ${isSelected ? 'text-zinc-900 font-black' : 'text-slate-800 font-bold'}`}>{c.title}</p>
+                                {status === 'fail' && (
+                                    <button onClick={(e) => { e.stopPropagation(); setExpandedIssueRow(prev => ({ ...prev, [c.id]: !prev[c.id] })); }} className="text-[10px] font-bold text-rose-500 hover:text-rose-600 flex items-center gap-1 w-max px-2 py-1 rounded bg-rose-50 hover:bg-rose-100 border border-rose-100 transition-all">
+                                        {expandedIssueRow[c.id] ? <ChevronRight size={12} className="rotate-90 transition-transform"/> : <ChevronRight size={12} className="transition-transform"/>}
+                                        이슈 관리 ({(run.results[c.id].issues || []).length})
+                                    </button>
+                                )}
+                            </div>
                           </div>
                         </td>
 
@@ -2198,6 +2298,64 @@ ${JSON.stringify(simplifiedData)}
                           </div>
                         </td>
                       </tr>
+                      {status === 'fail' && expandedIssueRow[c.id] && (
+                          <tr className={`bg-rose-50/30 border-l-4 ${isSelected ? 'border-l-zinc-700' : 'border-l-transparent'}`}>
+                              <td colSpan={selectedHeaders.length + 2} className="px-10 py-5">
+                                  <div className="bg-white rounded-xl border border-rose-100 shadow-sm p-4 cursor-default" onClick={e => e.stopPropagation()}>
+                                      <div className="flex justify-between items-center mb-3">
+                                          <h5 className="text-[11px] font-black text-rose-600 uppercase tracking-wider flex items-center gap-1.5">
+                                              <AlertTriangle size={14}/> 연관 이슈 목록
+                                          </h5>
+                                          <button onClick={() => handleAddIssue(c.id)} disabled={run.status === 'completed'} className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all ${run.status === 'completed' ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-rose-500 hover:bg-rose-600 text-white shadow-sm'}`}>
+                                              <Plus size={12}/> 이슈 추가
+                                          </button>
+                                      </div>
+                                      <div className="space-y-2.5">
+                                          {(run.results[c.id].issues || []).length === 0 ? (
+                                              <p className="text-[11px] font-medium text-slate-400 text-center py-4 bg-slate-50 rounded-lg border border-slate-100 border-dashed">등록된 이슈가 없습니다.</p>
+                                          ) : (
+                                              (run.results[c.id].issues || []).map(iss => {
+                                                  const isEditing = editingIssues[iss.id];
+                                                  return (
+                                                      <div key={iss.id} className="flex gap-2 items-center group/issue bg-slate-50/50 p-2 rounded-lg border border-slate-200/60 shadow-sm hover:bg-white hover:border-rose-200 transition-colors">
+                                                          {isEditing ? (
+                                                              <>
+                                                                  <input
+                                                                      type="text"
+                                                                      value={iss.text}
+                                                                      onChange={(e) => handleUpdateIssue(c.id, iss.id, e.target.value)}
+                                                                      readOnly={run.status === 'completed'}
+                                                                      placeholder="이슈 내용을 입력하세요 (예: JIRA-1234 화면 깨짐)"
+                                                                      className={`flex-1 text-[12px] font-medium px-3 py-2 rounded-md border outline-none shadow-inner transition-all caret-rose-500 ${run.status === 'completed' ? 'bg-slate-50 border-slate-200/60 text-slate-500 cursor-not-allowed' : 'bg-white border-rose-200 focus:border-rose-400 focus:ring-4 focus:ring-rose-500/10 text-slate-800'}`}
+                                                                      autoFocus
+                                                                      onKeyDown={(e) => { if(e.key === 'Enter') setEditingIssues(prev => ({...prev, [iss.id]: false})); }}
+                                                                  />
+                                                                  <button onClick={() => setEditingIssues(prev => ({...prev, [iss.id]: false}))} disabled={run.status === 'completed'} className={`px-3 py-2 text-[10px] font-bold rounded-md transition-colors whitespace-nowrap ${run.status === 'completed' ? 'hidden' : 'bg-rose-500 text-white hover:bg-rose-600 shadow-sm'}`}>등록</button>
+                                                                  <button onClick={() => setIssueToDelete({caseId: c.id, issueId: iss.id})} disabled={run.status === 'completed'} className={`p-2 rounded-md transition-colors ${run.status === 'completed' ? 'hidden' : 'text-slate-400 hover:text-rose-500 hover:bg-rose-50'}`}>
+                                                                      <X size={14}/>
+                                                                  </button>
+                                                              </>
+                                                          ) : (
+                                                              <>
+                                                                  <div className="flex-1 text-[12px] font-medium text-slate-700 px-2 py-1.5 break-all">{iss.text || <span className="text-slate-400 italic">내용이 없습니다.</span>}</div>
+                                                                  <div className="flex gap-1.5 opacity-0 group-hover/issue:opacity-100 transition-opacity">
+                                                                      <button onClick={() => setEditingIssues(prev => ({...prev, [iss.id]: true}))} disabled={run.status === 'completed'} className={`px-2.5 py-1.5 bg-slate-100 text-slate-600 text-[10px] font-bold rounded-md hover:bg-slate-200 transition-colors whitespace-nowrap ${run.status === 'completed' ? 'hidden' : ''}`}>수정</button>
+                                                                      <button onClick={() => setIssueToDelete({caseId: c.id, issueId: iss.id})} disabled={run.status === 'completed'} className={`p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-md transition-colors ${run.status === 'completed' ? 'hidden' : ''}`}>
+                                                                          <X size={14}/>
+                                                                      </button>
+                                                                  </div>
+                                                              </>
+                                                          )}
+                                                      </div>
+                                                  );
+                                              })
+                                          )}
+                                      </div>
+                                  </div>
+                              </td>
+                          </tr>
+                      )}
+                      </React.Fragment>
                     );
                   })}
                   {filteredCases.length === 0 && <tr><td colSpan={selectedHeaders.length + 2} className="p-10 text-center text-slate-400 text-[13px] font-bold">해당하는 케이스가 없습니다.</td></tr>}
