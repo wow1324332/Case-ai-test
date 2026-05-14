@@ -130,7 +130,6 @@ export default function QAApp() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [openSuites, setOpenSuites] = useState({});
 
-  // 실시간 동기화 상태 감지용 레퍼런스
   const skipNextSync = useRef(false);
   const isInitialSyncDone = useRef(false);
   const [activeUsers, setActiveUsers] = useState([]);
@@ -140,6 +139,11 @@ export default function QAApp() {
   const [editingValue, setEditingValue] = useState("");
   const [hiddenCols, setHiddenCols] = useState([]);
 
+  const [draggedCaseIndex, setDraggedCaseIndex] = useState(null);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedCaseIdsForDelete, setSelectedCaseIdsForDelete] = useState([]);
+  const longPressTimerRef = useRef(null);
+  const justLongPressedRef = useRef(false);
 
   useEffect(() => {
     const fadeTimer = setTimeout(() => setIsSplashFading(true), 2000); 
@@ -258,6 +262,8 @@ export default function QAApp() {
     setIsProjectSettingsOpen(false);
     setIsSuiteSettingsOpen(false);
     setIsHeaderDropdownOpen(false);
+    setIsSelectionMode(false);
+    setSelectedCaseIdsForDelete([]);
   }, [currentView]);
 
   const globalStyles = `
@@ -1302,6 +1308,76 @@ export default function QAApp() {
         setToastMessage('새로운 케이스가 삽입되었습니다.');
     };
 
+    const handleTouchStart = (caseId) => {
+        if (isSelectionMode) return; 
+        longPressTimerRef.current = setTimeout(() => {
+            justLongPressedRef.current = true;
+            setIsSelectionMode(true);
+            setSelectedCaseIdsForDelete(prev => [...new Set([...prev, caseId])]);
+            if (navigator.vibrate) navigator.vibrate(50);
+        }, 500);
+    };
+
+    const handleTouchMove = () => {
+        if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    };
+
+    const handleTouchEnd = () => {
+        if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+        if (justLongPressedRef.current) {
+            setTimeout(() => { justLongPressedRef.current = false; }, 500);
+        }
+    };
+
+    const toggleCaseSelection = (caseId) => {
+        setSelectedCaseIdsForDelete(prev => 
+            prev.includes(caseId) ? prev.filter(id => id !== caseId) : [...prev, caseId]
+        );
+    };
+
+    const handleCaseClick = (caseId) => {
+        if (justLongPressedRef.current) {
+            justLongPressedRef.current = false;
+            return;
+        }
+        if (isSelectionMode) {
+            toggleCaseSelection(caseId);
+        }
+    };
+
+    const handleSelectAll = (e) => {
+        if (e.target.checked) setSelectedCaseIdsForDelete(cases.map(c => c.id));
+        else setSelectedCaseIdsForDelete([]);
+    };
+
+    const handleBulkDelete = () => {
+        setData(prev => ({
+            ...prev,
+            cases: prev.cases.filter(c => !selectedCaseIdsForDelete.includes(c.id))
+        }));
+        setToastMessage(`${selectedCaseIdsForDelete.length}개의 케이스가 삭제되었습니다.`);
+        setIsSelectionMode(false);
+        setSelectedCaseIdsForDelete([]);
+    };
+
+    const handleDropCase = (e, targetIndex) => {
+        e.preventDefault();
+        if (draggedCaseIndex === null || draggedCaseIndex === targetIndex) return;
+
+        setData(prev => {
+            const allCases = [...prev.cases];
+            const suiteCases = allCases.filter(c => c.suiteId === activeSuiteId);
+            const otherCases = allCases.filter(c => c.suiteId !== activeSuiteId);
+            
+            const draggedCase = suiteCases[draggedCaseIndex];
+            suiteCases.splice(draggedCaseIndex, 1);
+            suiteCases.splice(targetIndex, 0, draggedCase);
+            
+            return { ...prev, cases: [...otherCases, ...suiteCases] };
+        });
+        setDraggedCaseIndex(null);
+    };
+
     return Layout({ title: `스위트: ${suite?.name}`, children: (
       <>
         <div className="mb-5 flex justify-between items-center relative z-20">
@@ -1309,7 +1385,15 @@ export default function QAApp() {
             <ChevronRight className="rotate-180" size={16}/> 프로젝트로 돌아가기
           </button>
           <div className="flex items-center gap-3">
-            <span className="text-xs font-medium text-slate-500">총 <span className="text-slate-800 font-bold">{cases.length}</span>개의 케이스</span>
+            {isSelectionMode ? (
+                <div className="flex items-center gap-2 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 animate-in fade-in duration-200">
+                    <span className="text-[11px] font-bold text-emerald-700">{selectedCaseIdsForDelete.length}개 선택됨</span>
+                    <button onClick={handleBulkDelete} className="text-[10px] font-bold px-2 py-1 bg-rose-500 text-white rounded hover:bg-rose-600 transition-colors shadow-sm">삭제</button>
+                    <button onClick={() => { setIsSelectionMode(false); setSelectedCaseIdsForDelete([]); }} className="text-[10px] font-bold px-2 py-1 bg-white text-slate-600 border border-slate-300 rounded hover:bg-slate-50 transition-colors shadow-sm">취소</button>
+                </div>
+            ) : (
+                <span className="text-xs font-medium text-slate-500">총 <span className="text-slate-800 font-bold">{cases.length}</span>개의 케이스</span>
+            )}
             <button onClick={() => { setEditSuiteName(suite?.name || ''); setIsSuiteSettingsOpen(true); }} className="text-slate-400 hover:text-zinc-600 hover:bg-zinc-100 p-1.5 rounded-lg transition-all ml-2">
                 <Settings size={18} />
             </button>
@@ -1351,11 +1435,16 @@ export default function QAApp() {
         )}
 
         <div className="bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-2xl flex flex-col max-h-[calc(100vh-200px)] hover:shadow-[0_8px_40px_rgb(0,0,0,0.12)] transition-shadow relative z-10 overflow-hidden">
-          <div className="overflow-auto custom-scrollbar flex-1 pb-2 rounded-2xl">
-            <table className="w-full text-left border-collapse min-w-max relative">
-              <thead className="sticky top-0 z-40 shadow-sm">
-                <tr className="bg-slate-50/95 backdrop-blur-xl border-b border-slate-200/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  <th className="px-5 py-4 w-16 text-center rounded-tl-2xl">ID</th>
+          <div className="overflow-auto custom-scrollbar flex-1 pb-2 rounded-2xl bg-white/40 backdrop-blur-sm relative">
+            <table className="w-full text-left border-collapse min-w-max relative z-0">
+              <thead className="sticky top-0 z-40 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+                <tr className="bg-slate-50/95 backdrop-blur-xl text-[11px] font-bold text-slate-500 uppercase tracking-wider relative after:absolute after:inset-x-0 after:bottom-0 after:border-b after:border-slate-200/80">
+                  <th className="px-3 py-4 w-12 text-center rounded-tl-2xl">
+                      {isSelectionMode && (
+                          <input type="checkbox" checked={selectedCaseIdsForDelete.length > 0 && selectedCaseIdsForDelete.length === cases.length} onChange={handleSelectAll} className="w-4 h-4 text-emerald-500 rounded border-slate-300 focus:ring-emerald-500/20" />
+                      )}
+                  </th>
+                  <th className="px-5 py-4 w-16 text-center">ID</th>
                   {suite?.headers?.filter(h => !hiddenCols.includes(h)).map((header) => (
                     <th key={header}
                         draggable
@@ -1392,24 +1481,50 @@ export default function QAApp() {
                   <th className="px-3 py-4 w-16 text-center rounded-tr-2xl"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100/80">
+              <tbody className="divide-y divide-slate-100/80 relative z-0">
                 {cases.length === 0 && (
-                  <tr><td colSpan={suite?.headers ? suite.headers.filter(h => !hiddenCols.includes(h)).length + 2 : 4} className="p-10 text-center text-[13px] font-medium text-slate-400">케이스가 없습니다.</td></tr>
+                  <tr><td colSpan={suite?.headers ? suite.headers.filter(h => !hiddenCols.includes(h)).length + 3 : 5} className="p-10 text-center text-[13px] font-medium text-slate-400">케이스가 없습니다.</td></tr>
                 )}
                 {cases.map((c, i) => (
                   <React.Fragment key={c.id}>
                     <tr className="group/add">
-                      <td colSpan={suite?.headers ? suite.headers.filter(h => !hiddenCols.includes(h)).length + 2 : 4} className="p-0 h-0 relative">
+                      <td colSpan={suite?.headers ? suite.headers.filter(h => !hiddenCols.includes(h)).length + 3 : 5} className="p-0 h-0 relative">
                         <div className="absolute inset-x-0 -top-1.5 h-3 z-30 opacity-0 group-hover/add:opacity-100 flex items-center justify-center cursor-pointer" onClick={() => handleInsertCaseRow(i)}>
                           <div className="w-full h-0.5 bg-emerald-400"></div>
                           <div className="absolute w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center text-white shadow-md shadow-emerald-500/30 hover:scale-110 transition-transform"><Plus size={12} strokeWidth={4}/></div>
                         </div>
                       </td>
                     </tr>
-                    <tr className="hover:bg-slate-50/50 transition-colors group/row">
-                      <td className="px-5 py-3.5 text-[11px] font-mono font-bold text-slate-400 text-center">C{i+1}</td>
+                    <tr 
+                        draggable={!isSelectionMode}
+                        onDragStart={(e) => { 
+                            if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+                            if(!isSelectionMode) { e.dataTransfer.effectAllowed = 'move'; setDraggedCaseIndex(i); } 
+                        }}
+                        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                        onDrop={(e) => handleDropCase(e, i)}
+                        onDragEnd={() => setDraggedCaseIndex(null)}
+                        onMouseDown={() => handleTouchStart(c.id)}
+                        onMouseMove={handleTouchMove}
+                        onMouseUp={handleTouchEnd}
+                        onMouseLeave={handleTouchEnd}
+                        onTouchStart={() => handleTouchStart(c.id)}
+                        onTouchMove={handleTouchMove}
+                        onTouchEnd={handleTouchEnd}
+                        className={`transition-colors group/row ${draggedCaseIndex === i ? 'opacity-50 bg-slate-200' : 'hover:bg-slate-50/50'} ${selectedCaseIdsForDelete.includes(c.id) ? 'bg-emerald-50/50' : ''}`}
+                    >
+                      <td className="px-3 py-3.5 text-center align-middle" onClick={() => handleCaseClick(c.id)}>
+                          {isSelectionMode ? (
+                              <input type="checkbox" checked={selectedCaseIdsForDelete.includes(c.id)} onChange={() => toggleCaseSelection(c.id)} onClick={(e) => e.stopPropagation()} className="w-4 h-4 text-emerald-500 rounded border-slate-300 focus:ring-emerald-500/20 cursor-pointer" />
+                          ) : (
+                              <div className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500 opacity-0 group-hover/row:opacity-100 flex justify-center transition-opacity">
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+                              </div>
+                          )}
+                      </td>
+                      <td className="px-5 py-3.5 text-[11px] font-mono font-bold text-slate-400 text-center" onClick={() => handleCaseClick(c.id)}>C{i+1}</td>
                       {suite?.headers?.filter(h => !hiddenCols.includes(h)).map((header) => (
-                        <td key={header} className={`px-5 py-3.5 text-[13px] font-medium text-slate-700 max-w-[250px] relative group/cell ${editingCell?.id === c.id && editingCell?.header === header ? 'z-50' : ''}`} onDoubleClick={() => handleDoubleClickCell(c, header)}
+                        <td key={header} className={`px-5 py-3.5 text-[13px] font-medium text-slate-700 max-w-[250px] relative group/cell ${editingCell?.id === c.id && editingCell?.header === header ? 'z-50' : ''}`} onDoubleClick={() => !isSelectionMode && handleDoubleClickCell(c, header)}
                             onMouseEnter={(e) => {
                                 if (c.fields?.[header]?.length > 15) {
                                     const rect = e.currentTarget.getBoundingClientRect();
@@ -1434,7 +1549,7 @@ export default function QAApp() {
                                     }}
                                     onBlur={(e) => saveEditingCellLocal(e.target.value)} 
                                     onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.blur(); } }} 
-                                    className="w-full min-h-[50px] text-[12px] font-bold p-2.5 border-2 border-emerald-400 rounded-xl outline-none shadow-[0_10px_25px_rgb(16,185,129,0.15)] bg-white resize-none caret-emerald-600" 
+                                    className="w-full min-h-[50px] text-[12px] font-bold p-2.5 border-2 border-emerald-400 rounded-xl outline-none shadow-[0_10px_25px_rgb(16,185,129,0.15)] bg-white resize-none caret-emerald-600 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]" 
                                  />
                              </div>
                           ) : (
@@ -1445,16 +1560,18 @@ export default function QAApp() {
                         </td>
                       ))}
                       <td className="px-3 py-3.5 text-center align-middle">
-                          <button onClick={() => handleDeleteCaseRow(c.id)} className="text-slate-300 hover:text-rose-500 hover:bg-rose-50 p-1.5 rounded-lg transition-all opacity-0 group-hover/row:opacity-100">
-                             <XCircle size={16} />
-                          </button>
+                          {!isSelectionMode && (
+                              <button onClick={() => handleDeleteCaseRow(c.id)} className="text-slate-300 hover:text-rose-500 hover:bg-rose-50 p-1.5 rounded-lg transition-all opacity-0 group-hover/row:opacity-100">
+                                 <XCircle size={16} />
+                              </button>
+                          )}
                       </td>
                     </tr>
                   </React.Fragment>
                 ))}
                 {cases.length > 0 && (
                    <tr className="group/add">
-                     <td colSpan={suite?.headers ? suite.headers.filter(h => !hiddenCols.includes(h)).length + 2 : 4} className="p-0 h-0 relative">
+                     <td colSpan={suite?.headers ? suite.headers.filter(h => !hiddenCols.includes(h)).length + 3 : 5} className="p-0 h-0 relative">
                        <div className="absolute inset-x-0 -top-1.5 h-3 z-30 opacity-0 group-hover/add:opacity-100 flex items-center justify-center cursor-pointer" onClick={() => handleInsertCaseRow(cases.length)}>
                          <div className="w-full h-0.5 bg-emerald-400"></div>
                          <div className="absolute w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center text-white shadow-md shadow-emerald-500/30 hover:scale-110 transition-transform"><Plus size={12} strokeWidth={4}/></div>
@@ -1469,7 +1586,7 @@ export default function QAApp() {
 
       {tooltipInfo && typeof document !== 'undefined' && createPortal(
           <div style={{ top: tooltipInfo.y, left: tooltipInfo.x, transform: 'translate(-50%, -100%)' }} 
-               className="fixed z-[9999] w-max max-w-[320px] bg-zinc-800 text-white text-[12px] font-medium p-3.5 rounded-xl shadow-[0_10px_30px_rgb(0,0,0,0.2)] whitespace-normal break-words leading-relaxed pointer-events-none before:content-[''] before:absolute before:top-full before:left-1/2 before:-translate-x-1/2 before:border-4 before:border-transparent before:border-t-zinc-800 animate-in fade-in zoom-in-95 duration-100">
+               className="fixed z-[9999] w-max max-w-[320px] bg-zinc-800 text-white text-[12px] font-medium p-3.5 rounded-xl shadow-[0_10px_30px_rgb(0,0,0,0.2)] whitespace-pre-wrap break-words leading-relaxed pointer-events-none before:content-[''] before:absolute before:top-full before:left-1/2 before:-translate-x-1/2 before:border-4 before:border-transparent before:border-t-zinc-800 animate-in fade-in zoom-in-95 duration-100">
               <div className="flex items-center gap-1.5 mb-2 text-emerald-400 font-bold border-b border-zinc-700 pb-1.5"><Search size={12}/> 전체 내용</div>
               {tooltipInfo.text}
           </div>,
