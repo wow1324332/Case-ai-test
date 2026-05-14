@@ -115,6 +115,7 @@ export default function QAApp() {
   const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] = useState(false);
   const [isCreateSuiteModalOpen, setIsCreateSuiteModalOpen] = useState(false);
   const [isDeleteProjectConfirmOpen, setIsDeleteProjectConfirmOpen] = useState(false);
+  const [isCompleteRunConfirmOpen, setIsCompleteRunConfirmOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const [loginTab, setLoginTab] = useState('login');
@@ -790,6 +791,27 @@ export default function QAApp() {
          </div>
       )}
 
+      {isCompleteRunConfirmOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-900/60 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
+              <div className="bg-white rounded-2xl p-6 w-[320px] shadow-2xl border border-white/20">
+                  <h3 className="text-[15px] font-black text-zinc-900 mb-2">테스트 런 완료</h3>
+                  <p className="text-xs text-zinc-500 font-medium mb-6">테스트 런을 완료하시겠습니까? 완료 후에는 더 이상 결과를 변경할 수 없습니다.</p>
+                  <div className="flex justify-end gap-2.5">
+                      <button onClick={() => setIsCompleteRunConfirmOpen(false)} className="px-4 py-2.5 rounded-xl text-xs font-bold text-zinc-500 hover:bg-zinc-100 transition-colors">취소</button>
+                      <button onClick={() => {
+                        setData(prev => {
+                          const newRuns = prev.runs.map(r => r.id === activeRunId ? { ...r, status: 'completed' } : r);
+                          return { ...prev, runs: newRuns };
+                        });
+                        setIsDetailOpen(true);
+                        setToastMessage('테스트 런이 완료되었습니다.');
+                        setIsCompleteRunConfirmOpen(false);
+                      }} className="px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-500 text-white shadow-md hover:bg-emerald-600 transition-colors">완료하기</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {isProfileOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/60 backdrop-blur-md animate-in fade-in duration-300">
              <div className="bg-white/90 backdrop-blur-xl border border-white shadow-2xl rounded-3xl p-8 w-[400px] relative">
@@ -1160,6 +1182,8 @@ export default function QAApp() {
 
     const projSuites = data.suites.filter(s => s.projectId === project.id);
     const projRuns = data.runs.filter(r => r.projectId === project.id);
+    const activeRuns = projRuns.filter(r => r.status !== 'completed');
+    const completedRuns = projRuns.filter(r => r.status === 'completed');
 
     const handleUpdateProject = (e) => {
         e.preventDefault();
@@ -1207,7 +1231,7 @@ export default function QAApp() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-2xl p-6 hover:shadow-[0_8px_40px_rgb(0,0,0,0.12)] transition-shadow">
             <h3 className="text-[13px] font-bold text-slate-800 mb-4 flex items-center gap-2">
               <Folder size={16} className="text-zinc-500"/> 테스트 스위트 구성
@@ -1243,18 +1267,43 @@ export default function QAApp() {
               <Activity size={16} className="text-emerald-500"/> 활성 테스트 런
             </h3>
             <div className="space-y-3">
-              {projRuns.length === 0 ? (
+              {activeRuns.length === 0 ? (
                 <div className="text-center py-10 text-slate-400 bg-slate-50/50 rounded-xl border-2 border-dashed border-slate-200/80 text-[13px] font-medium">
                   <PlayCircle size={32} className="mx-auto mb-3 text-slate-300 opacity-60" />
-                  <p>진행 중이거나 완료된 런이 없습니다.<br/>'새 테스트 런 시작'을 눌러주세요.</p>
+                  <p>진행 중인 런이 없습니다.<br/>'새 테스트 런 시작'을 눌러주세요.</p>
                 </div>
               ) : (
-                projRuns.map(run => (
+                activeRuns.map(run => (
                   <div key={run.id} onClick={() => { setActiveRunId(run.id); setCurrentView('execute_run'); }} className="group bg-white/60 border border-slate-200/60 rounded-xl p-4 cursor-pointer hover:bg-white hover:border-emerald-300 hover:shadow-[0_4px_20px_rgb(16,185,129,0.08)] transition-all duration-300">
                     <div className="flex justify-between items-center">
                       <h4 className="text-[13px] font-bold text-slate-800 group-hover:text-emerald-700 transition-colors">{run.name}</h4>
-                      <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold border ${run.status === 'completed' ? 'bg-slate-100/50 text-slate-500 border-slate-200/60' : 'bg-emerald-50 text-emerald-600 border-emerald-200/60'}`}>
-                        {run.status === 'completed' ? '종료됨' : '진행중'}
+                      <span className="px-2.5 py-1 rounded-md text-[10px] font-bold border bg-emerald-50 text-emerald-600 border-emerald-200/60">
+                        진행중
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-2xl p-6 hover:shadow-[0_8px_40px_rgb(0,0,0,0.12)] transition-shadow">
+            <h3 className="text-[13px] font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <CheckCircle size={16} className="text-slate-400"/> 종료된 테스트 런
+            </h3>
+            <div className="space-y-3">
+              {completedRuns.length === 0 ? (
+                <div className="text-center py-10 text-slate-400 bg-slate-50/50 rounded-xl border-2 border-dashed border-slate-200/80 text-[13px] font-medium">
+                  <CheckCircle size={32} className="mx-auto mb-3 text-slate-300 opacity-60" />
+                  <p>종료된 테스트 런이 없습니다.</p>
+                </div>
+              ) : (
+                completedRuns.map(run => (
+                  <div key={run.id} onClick={() => { setActiveRunId(run.id); setCurrentView('execute_run'); }} className="group bg-white/60 border border-slate-200/60 rounded-xl p-4 cursor-pointer hover:bg-white hover:border-slate-300 hover:shadow-[0_4px_20px_rgba(0,0,0,0.08)] transition-all duration-300">
+                    <div className="flex justify-between items-center">
+                      <h4 className="text-[13px] font-bold text-slate-800 group-hover:text-slate-900 transition-colors">{run.name}</h4>
+                      <span className="px-2.5 py-1 rounded-md text-[10px] font-bold border bg-slate-100/50 text-slate-500 border-slate-200/60">
+                        종료됨
                       </span>
                     </div>
                   </div>
@@ -1903,6 +1952,7 @@ ${JSON.stringify(simplifiedData)}
     const runHeaders = run.runHeaders || Array.from(new Set(runCases.flatMap(c => { const suite = data.suites.find(s => s.id === c.suiteId); return suite?.headers || []; })));
 
     const handleResultUpdate = (status) => {
+      if (run.status === 'completed') return;
       if(!selectedCaseId) return;
       setData(prev => {
         const newRuns = prev.runs.map(r => r.id === activeRunId ? { ...r, results: { ...r.results, [selectedCaseId]: { ...r.results[selectedCaseId], status } } } : r);
@@ -1915,6 +1965,7 @@ ${JSON.stringify(simplifiedData)}
     };
 
     const handleNoteUpdate = (e) => {
+      if (run.status === 'completed') return;
       if(!selectedCaseId) return;
       const note = e.target.value;
       setData(prev => {
@@ -1924,6 +1975,7 @@ ${JSON.stringify(simplifiedData)}
     }
 
     const handleInlineResultUpdate = (caseId, status) => {
+      if (run.status === 'completed') return;
       setData(prev => {
         const newRuns = prev.runs.map(r => r.id === activeRunId ? { ...r, results: { ...r.results, [caseId]: { ...r.results[caseId], status } } } : r);
         return { ...prev, runs: newRuns };
@@ -1938,6 +1990,7 @@ ${JSON.stringify(simplifiedData)}
       });
       setIsDetailOpen(true);
       setToastMessage('테스트 런이 완료되었습니다.');
+      setIsCompleteRunConfirmOpen(false);
     };
 
     const handleUpdateRun = (e) => {
@@ -1973,7 +2026,7 @@ ${JSON.stringify(simplifiedData)}
                 <Settings size={18} />
              </button>
              {run.status === 'active' ? (
-                <button onClick={handleCompleteRun} className="px-4 py-2 bg-gradient-to-b from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-lg text-xs font-bold shadow-[0_4px_14px_0_rgb(16,185,129,0.39)] border border-emerald-500/50 transition-all flex items-center gap-1.5">
+                <button onClick={() => setIsCompleteRunConfirmOpen(true)} className="px-4 py-2 bg-gradient-to-b from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-lg text-xs font-bold shadow-[0_4px_14px_0_rgb(16,185,129,0.39)] border border-emerald-500/50 transition-all flex items-center gap-1.5">
                   <CheckCircle size={14}/> 런 완료
                 </button>
               ) : (
@@ -2133,13 +2186,13 @@ ${JSON.stringify(simplifiedData)}
 
                         <td className="px-4 py-3.5 text-left w-[180px]">
                           <div className="inline-flex gap-1.5 shrink-0 bg-white/80 backdrop-blur-sm rounded-lg border border-slate-200/80 p-1 shadow-sm" onClick={(e) => e.stopPropagation()}>
-                             <button onClick={(e) => { e.stopPropagation(); handleInlineResultUpdate(c.id, 'pass'); }} className={`px-2.5 py-1.5 rounded-md text-[10px] font-black tracking-widest transition-all ${status === 'pass' ? 'bg-gradient-to-b from-emerald-400 to-emerald-500 text-white shadow-md border-emerald-400' : 'text-slate-400 hover:bg-emerald-50 hover:text-emerald-500'}`}>
+                             <button disabled={run.status === 'completed'} onClick={(e) => { e.stopPropagation(); if (run.status !== 'completed') handleInlineResultUpdate(c.id, 'pass'); }} className={`px-2.5 py-1.5 rounded-md text-[10px] font-black tracking-widest transition-all ${status === 'pass' ? 'bg-gradient-to-b from-emerald-400 to-emerald-500 text-white shadow-md border-emerald-400' : 'text-slate-400 hover:bg-emerald-50 hover:text-emerald-500'} ${run.status === 'completed' ? 'opacity-60 cursor-not-allowed hover:bg-transparent hover:text-slate-400 border border-transparent' : ''}`}>
                                PASS
                              </button>
-                             <button onClick={(e) => { e.stopPropagation(); handleInlineResultUpdate(c.id, 'fail'); }} className={`px-2.5 py-1.5 rounded-md text-[10px] font-black tracking-widest transition-all ${status === 'fail' ? 'bg-gradient-to-b from-rose-400 to-rose-500 text-white shadow-md border-rose-400' : 'text-slate-400 hover:bg-rose-50 hover:text-rose-500'}`}>
+                             <button disabled={run.status === 'completed'} onClick={(e) => { e.stopPropagation(); if (run.status !== 'completed') handleInlineResultUpdate(c.id, 'fail'); }} className={`px-2.5 py-1.5 rounded-md text-[10px] font-black tracking-widest transition-all ${status === 'fail' ? 'bg-gradient-to-b from-rose-400 to-rose-500 text-white shadow-md border-rose-400' : 'text-slate-400 hover:bg-rose-50 hover:text-rose-500'} ${run.status === 'completed' ? 'opacity-60 cursor-not-allowed hover:bg-transparent hover:text-slate-400 border border-transparent' : ''}`}>
                                FAIL
                              </button>
-                             <button onClick={(e) => { e.stopPropagation(); handleInlineResultUpdate(c.id, 'block'); }} className={`px-2.5 py-1.5 rounded-md text-[10px] font-black tracking-widest transition-all ${status === 'block' ? 'bg-gradient-to-b from-amber-400 to-amber-500 text-white shadow-md border-amber-400' : 'text-slate-400 hover:bg-amber-50 hover:text-amber-500'}`}>
+                             <button disabled={run.status === 'completed'} onClick={(e) => { e.stopPropagation(); if (run.status !== 'completed') handleInlineResultUpdate(c.id, 'block'); }} className={`px-2.5 py-1.5 rounded-md text-[10px] font-black tracking-widest transition-all ${status === 'block' ? 'bg-gradient-to-b from-amber-400 to-amber-500 text-white shadow-md border-amber-400' : 'text-slate-400 hover:bg-amber-50 hover:text-amber-500'} ${run.status === 'completed' ? 'opacity-60 cursor-not-allowed hover:bg-transparent hover:text-slate-400 border border-transparent' : ''}`}>
                                BLOCK
                              </button>
                           </div>
@@ -2189,15 +2242,15 @@ ${JSON.stringify(simplifiedData)}
                     </div>
                     
                     <div className="flex gap-2.5 mt-5">
-                      <button onClick={() => handleResultUpdate('pass')} className={`flex-1 py-2.5 rounded-xl flex items-center justify-center gap-2 border transition-all duration-300 ${selectedResult.status === 'pass' ? 'bg-gradient-to-b from-emerald-400 to-emerald-500 border-emerald-400 text-white shadow-[0_6px_20px_rgb(16,185,129,0.3)]' : 'border-slate-200/80 bg-white/60 text-slate-600 hover:border-emerald-300 hover:bg-emerald-50/50 hover:text-emerald-600'}`}>
+                      <button disabled={run.status === 'completed'} onClick={() => handleResultUpdate('pass')} className={`flex-1 py-2.5 rounded-xl flex items-center justify-center gap-2 border transition-all duration-300 ${selectedResult.status === 'pass' ? 'bg-gradient-to-b from-emerald-400 to-emerald-500 border-emerald-400 text-white shadow-[0_6px_20px_rgb(16,185,129,0.3)]' : 'border-slate-200/80 bg-white/60 text-slate-600 hover:border-emerald-300 hover:bg-emerald-50/50 hover:text-emerald-600'} ${run.status === 'completed' ? 'opacity-60 cursor-not-allowed' : ''}`}>
                         <CheckCircle size={16} />
                         <span className="text-[11px] font-black tracking-widest uppercase">Pass</span>
                       </button>
-                      <button onClick={() => handleResultUpdate('fail')} className={`flex-1 py-2.5 rounded-xl flex items-center justify-center gap-2 border transition-all duration-300 ${selectedResult.status === 'fail' ? 'bg-gradient-to-b from-rose-400 to-rose-500 border-rose-400 text-white shadow-[0_6px_20px_rgb(244,63,94,0.3)]' : 'border-slate-200/80 bg-white/60 text-slate-600 hover:border-rose-300 hover:bg-rose-50/50 hover:text-rose-600'}`}>
+                      <button disabled={run.status === 'completed'} onClick={() => handleResultUpdate('fail')} className={`flex-1 py-2.5 rounded-xl flex items-center justify-center gap-2 border transition-all duration-300 ${selectedResult.status === 'fail' ? 'bg-gradient-to-b from-rose-400 to-rose-500 border-rose-400 text-white shadow-[0_6px_20px_rgb(244,63,94,0.3)]' : 'border-slate-200/80 bg-white/60 text-slate-600 hover:border-rose-300 hover:bg-rose-50/50 hover:text-rose-600'} ${run.status === 'completed' ? 'opacity-60 cursor-not-allowed' : ''}`}>
                         <XCircle size={16} />
                         <span className="text-[11px] font-black tracking-widest uppercase">Fail</span>
                       </button>
-                      <button onClick={() => handleResultUpdate('block')} className={`flex-1 py-2.5 rounded-xl flex items-center justify-center gap-2 border transition-all duration-300 ${selectedResult.status === 'block' ? 'bg-gradient-to-b from-amber-400 to-amber-500 border-amber-400 text-white shadow-[0_6px_20px_rgb(245,158,11,0.3)]' : 'border-slate-200/80 bg-white/60 text-slate-600 hover:border-amber-300 hover:bg-amber-50/50 hover:text-amber-600'}`}>
+                      <button disabled={run.status === 'completed'} onClick={() => handleResultUpdate('block')} className={`flex-1 py-2.5 rounded-xl flex items-center justify-center gap-2 border transition-all duration-300 ${selectedResult.status === 'block' ? 'bg-gradient-to-b from-amber-400 to-amber-500 border-amber-400 text-white shadow-[0_6px_20px_rgb(245,158,11,0.3)]' : 'border-slate-200/80 bg-white/60 text-slate-600 hover:border-amber-300 hover:bg-amber-50/50 hover:text-amber-600'} ${run.status === 'completed' ? 'opacity-60 cursor-not-allowed' : ''}`}>
                         <AlertTriangle size={16} />
                         <span className="text-[11px] font-black tracking-widest uppercase">Block</span>
                       </button>
@@ -2229,8 +2282,9 @@ ${JSON.stringify(simplifiedData)}
                       <textarea 
                         value={selectedResult.note || ''} 
                         onChange={handleNoteUpdate}
-                        placeholder="버그 정보, 환경, 이슈 링크 등을 기록하세요."
-                        className="w-full bg-slate-50/80 border border-slate-200/60 rounded-xl p-3 text-slate-800 text-[13px] font-medium focus:border-zinc-500/50 focus:ring-4 focus:ring-zinc-500/10 outline-none transition-all resize-none h-28 shadow-inner caret-zinc-800"
+                        readOnly={run.status === 'completed'}
+                        placeholder={run.status === 'completed' ? "완료된 테스트 런은 메모를 수정할 수 없습니다." : "버그 정보, 환경, 이슈 링크 등을 기록하세요."}
+                        className={`w-full bg-slate-50/80 border border-slate-200/60 rounded-xl p-3 text-slate-800 text-[13px] font-medium outline-none transition-all resize-none h-28 shadow-inner caret-zinc-800 ${run.status === 'completed' ? 'cursor-not-allowed bg-slate-100/50 text-slate-500' : 'focus:border-zinc-500/50 focus:ring-4 focus:ring-zinc-500/10'}`}
                       />
                     </section>
                   </div>
