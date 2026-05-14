@@ -8,7 +8,7 @@ import {
   Play, CheckCircle, XCircle, AlertTriangle, ShieldAlert, FolderPlus, 
   FileSpreadsheet, UploadCloud, ChevronRight, LayoutDashboard, Folder, 
   Activity, Settings, LogOut, Plus, Search, Filter, PlayCircle, Info,
-  User, Camera, X
+  User, Camera, X, Sparkles
 } from 'lucide-react';
 
 // Firebase 및 Gemini 환경 변수를 안전하게 가져오기
@@ -134,6 +134,9 @@ export default function QAApp() {
   const [data, setData] = useState({ projects: [], suites: [], cases: [], runs: [] });
   const [isLoaded, setIsLoaded] = useState(false);
   const [openSuites, setOpenSuites] = useState({});
+
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [isAILoading, setIsAILoading] = useState(false);
 
   const skipNextSync = useRef(false);
   const isInitialSyncDone = useRef(false);
@@ -1706,9 +1709,114 @@ export default function QAApp() {
       setCurrentView('execute_run');
     };
 
+    const handleAIGenerateRun = async () => {
+      if (!aiPrompt.trim()) { setToastMessage('조건을 입력해주세요.'); return; }
+      if (!aiModel) { setToastMessage('AI 기능이 비활성화되어 있습니다. (API 키 확인)'); return; }
+      
+      const projCases = data.cases.filter(c => projSuites.some(s => s.id === c.suiteId));
+      if (projCases.length === 0) { setToastMessage('프로젝트에 테스트 케이스가 없습니다.'); return; }
+      
+      setIsAILoading(true);
+      try {
+        const simplifiedData = projCases.map(c => ({ id: c.id, title: c.title, suiteName: projSuites.find(s => s.id === c.suiteId)?.name || '', priority: c.priority, fields: c.fields }));
+        const prompt = `
+당신은 QA 테스트 플랫폼의 AI 어시스턴트입니다.
+사용자가 자연어 명령을 통해 테스트 런을 자동 생성하려고 합니다.
+
+현재 프로젝트의 테스트 케이스 목록은 다음과 같습니다(JSON):
+${JSON.stringify(simplifiedData)}
+
+사용자 명령: "${aiPrompt}"
+
+명령을 분석하여 조건에 맞는 테스트 케이스 ID 목록과 적절한 테스트 런 이름을 JSON 형태로 반환하세요.
+반드시 아래 스키마의 순수 JSON 문자열만 반환해야 합니다. (마크다운 포맷팅 제외)
+{
+  "runName": "생성된 테스트 런 이름",
+  "selectedCaseIds": ["id1", "id2"]
+}
+`;
+        const result = await aiModel.generateContent(prompt);
+        const text = result.response.text().replace(/```json/gi, '').replace(/```/g, '').trim();
+        const parsed = JSON.parse(text);
+
+        if (!parsed.selectedCaseIds || parsed.selectedCaseIds.length === 0) {
+            setToastMessage('조건에 맞는 케이스를 찾지 못했습니다.');
+            setIsAILoading(false);
+            return;
+        }
+
+        const runCasesSnapshot = data.cases.filter(c => parsed.selectedCaseIds.includes(c.id)).map(c => JSON.parse(JSON.stringify(c)));
+        const suiteIds = [...new Set(runCasesSnapshot.map(c => c.suiteId))];
+        const headersSnapshot = Array.from(new Set(suiteIds.flatMap(id => data.suites.find(s => s.id === id)?.headers || [])));
+        const initialResults = {};
+        runCasesSnapshot.forEach(c => { initialResults[c.id] = { status: 'untested', note: '' }; });
+
+        const newRun = { 
+            id: generateId(), 
+            projectId: activeProjectId, 
+            name: parsed.runName || `Case ai Generated Run - ${new Date().toLocaleDateString()}`, 
+            status: 'active', 
+            results: initialResults, 
+            createdAt: new Date().toISOString(),
+            runCases: runCasesSnapshot,
+            runHeaders: headersSnapshot
+        };
+        setData(prev => ({ ...prev, runs: [...prev.runs, newRun] }));
+        setActiveRunId(newRun.id);
+        if (runCasesSnapshot.length > 0) setSelectedCaseId(runCasesSnapshot[0].id); else setSelectedCaseId(null);
+        setCurrentView('execute_run');
+        setToastMessage('Case ai가 성공적으로 테스트 런을 생성했습니다.');
+        setAiPrompt('');
+      } catch (error) {
+        console.error('AI Generation Error:', error);
+        setToastMessage('AI 처리 중 오류가 발생했습니다. 명령어를 구체적으로 작성해보세요.');
+      } finally {
+        setIsAILoading(false);
+      }
+    };
+
     return Layout({ title: "테스트 런 생성", children: (
       <>
         <div className="max-w-4xl mx-auto mt-6 bg-white/80 backdrop-blur-xl border border-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-2xl p-8 hover:shadow-[0_8px_40px_rgb(0,0,0,0.12)] transition-shadow">
+          
+          <div className="mb-8 p-6 bg-gradient-to-br from-indigo-50/80 to-purple-50/80 border border-indigo-100/80 rounded-2xl shadow-inner relative overflow-hidden">
+              <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-purple-400/10 rounded-full blur-3xl pointer-events-none"></div>
+              <div className="absolute bottom-[-20%] left-[-10%] w-64 h-64 bg-indigo-400/10 rounded-full blur-3xl pointer-events-none"></div>
+              
+              <h4 className="text-[14px] font-black text-indigo-900 mb-3 flex items-center gap-1.5 relative z-10">
+                  <Sparkles size={18} className="text-indigo-500" /> Case ai 스마트 생성
+              </h4>
+              <p className="text-[11px] font-bold text-indigo-900/60 mb-4 relative z-10">자연어로 조건을 입력하면 AI가 케이스를 분석하여 자동으로 테스트 런을 구성합니다.</p>
+              
+              <div className="flex gap-3 relative z-10">
+                  <input 
+                      value={aiPrompt} 
+                      onChange={e => setAiPrompt(e.target.value)} 
+                      onKeyDown={e => { if(e.key === 'Enter') { e.preventDefault(); handleAIGenerateRun(); } }}
+                      placeholder="예: '회원가입' 스위트에서 중요도가 'High'인 케이스들로 생성해줘" 
+                      className="flex-1 bg-white/90 backdrop-blur-sm border border-indigo-200/80 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-900 focus:outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 transition-all shadow-sm caret-indigo-600 placeholder:font-medium placeholder:text-indigo-300" 
+                  />
+                  <button 
+                      type="button"
+                      onClick={handleAIGenerateRun} 
+                      disabled={isAILoading}
+                      className="px-6 py-3.5 rounded-xl text-[13px] font-black bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-[0_4px_14px_0_rgba(99,102,241,0.39)] transition-all flex items-center gap-2 whitespace-nowrap"
+                  >
+                      {isAILoading ? (
+                          <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> 생성 중...</>
+                      ) : (
+                          <><Sparkles size={16} fill="currentColor"/> 자동 생성</>
+                      )}
+                  </button>
+              </div>
+          </div>
+          
+          <div className="flex items-center gap-4 mb-8">
+              <div className="h-px bg-slate-200 flex-1"></div>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">OR MANUAL SELECTION</span>
+              <div className="h-px bg-slate-200 flex-1"></div>
+          </div>
+
           <form onSubmit={handleCreateRun}>
             <div className="mb-8">
               <label className="block text-[11px] font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">Test Run Name</label>
